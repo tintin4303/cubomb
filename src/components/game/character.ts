@@ -482,18 +482,17 @@ export class MinerAvatar {
       camera.getWorldDirection(camForward);
       const camRight = new THREE.Vector3().crossVectors(camForward, camera.up).normalize();
 
-      // Project camera forward and right vectors onto the face tangent plane
-      let fwdOnPlane = camForward.clone().projectOnPlane(currentFaceNormal).normalize();
-      if (fwdOnPlane.lengthSq() < 0.01) {
-        fwdOnPlane = camera.up.clone().projectOnPlane(currentFaceNormal).normalize();
-      }
+      // Screen-aligned movement on the face tangent plane:
       let rightOnPlane = camRight.clone().projectOnPlane(currentFaceNormal).normalize();
       if (rightOnPlane.lengthSq() < 0.01) {
-        rightOnPlane = new THREE.Vector3().crossVectors(fwdOnPlane, currentFaceNormal).normalize();
+        rightOnPlane = (Math.abs(currentFaceNormal.y) > 0.8)
+          ? new THREE.Vector3(1, 0, 0)
+          : new THREE.Vector3(0, 0, 1).cross(currentFaceNormal).normalize();
       }
+      const upOnPlane = new THREE.Vector3().crossVectors(currentFaceNormal, rightOnPlane).normalize();
 
-      if (input.forward) walkDir.add(fwdOnPlane);
-      if (input.backward) walkDir.sub(fwdOnPlane);
+      if (input.forward) walkDir.add(upOnPlane);
+      if (input.backward) walkDir.sub(upOnPlane);
       if (input.right) walkDir.add(rightOnPlane);
       if (input.left) walkDir.sub(rightOnPlane);
 

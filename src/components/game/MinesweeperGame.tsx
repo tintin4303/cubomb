@@ -569,24 +569,8 @@ export const MinesweeperGame: React.FC = () => {
       playerHex
     );
     miner.teleportToCoord(spawnCoord);
-    currentMinerFaceRef.current = randomFace;
-    miner.onFaceChange = (newFace) => {
-      const oldFace = currentMinerFaceRef.current;
-      currentMinerFaceRef.current = newFace;
-      setMinerFace(newFace);
-
-      // Seamlessly rotate third-person follow camera around cube planet
-      if (cameraRef.current && minerAvatarRef.current && oldFace !== newFace) {
-        const oldNorm = minerAvatarRef.current.getFaceNormal(oldFace);
-        const newNorm = minerAvatarRef.current.getFaceNormal(newFace);
-        const qEdge = new THREE.Quaternion().setFromUnitVectors(oldNorm, newNorm);
-
-        // Rotate camera position and up vector around the cube center (0, 0, 0)
-        cameraRef.current.position.applyQuaternion(qEdge);
-        cameraRef.current.up.applyQuaternion(qEdge);
-        controlsTargetRef.current.copy(minerAvatarRef.current.group.position);
-        cameraRef.current.lookAt(controlsTargetRef.current);
-      }
+    miner.onFaceChange = (face) => {
+      setMinerFace(face);
     };
     miner.canStepTo = (coord) => {
       const cell = board.cellMap.get(`${coord.face}_${coord.u}_${coord.v}`);
@@ -658,6 +642,15 @@ export const MinesweeperGame: React.FC = () => {
         // Translate camera along with target so the view angle set by the player is 100% preserved
         cameraRef.current.position.add(targetDelta);
         cameraRef.current.lookAt(target);
+
+        // Smoothly rotate camera up vector when traversing across cube faces
+        if (mode === "surface") {
+          const normal = minerAvatarRef.current.currentNormal;
+          if (cameraRef.current.up.dot(normal) < 0.999) {
+            cameraRef.current.up.lerp(normal, 0.08).normalize();
+            cameraRef.current.lookAt(target);
+          }
+        }
       }
 
       // Update Miner Avatar Continuous Movement (Roblox bLockerman style)
