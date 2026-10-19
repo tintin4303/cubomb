@@ -3,24 +3,34 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "tailwindcss -i src/app/tailwind.css -o src/app/globals.css",
     "dev": "next dev",
+    "prebuild": "tailwindcss -i src/app/tailwind.css -o src/app/globals.css",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "canvas-confetti": "^1.9.4",
+    "lucide-react": "^1.59.0",
     "next": "16.4.2",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "three": "^0.186.1"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/turbopack": "^4",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.186.0",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "postcss": "^8.5.30",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
