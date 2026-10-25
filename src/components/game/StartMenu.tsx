@@ -20,6 +20,10 @@ import {
 import { Difficulty, GameMode, DIFFICULTY_PRESETS } from "./types";
 import { partyClient } from "@/lib/partyClient";
 import { sound } from "./sound";
+import { authManager, UserProfile } from "@/lib/authManager";
+import { AuthModal } from "./AuthModal";
+import { FriendsModal } from "./FriendsModal";
+import { friendsManager } from "@/lib/friendsManager";
 
 interface StartMenuProps {
   onStartSolo: (mode: GameMode, difficulty: Difficulty) => void;
@@ -58,12 +62,31 @@ export const StartMenu: React.FC<StartMenuProps> = ({
   const [isJoining, setIsJoining] = useState<boolean>(false);
   const [joinError, setJoinError] = useState<string | null>(null);
 
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [showFriendsModal, setShowFriendsModal] = useState<boolean>(false);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState<number>(0);
+
   useEffect(() => {
+    // Check Supabase session
+    authManager.getSessionUser().then(() => {
+      const p = authManager.getProfile();
+      if (p) {
+        setProfile(p);
+        setPlayerName(p.username);
+        setSelectedColor(p.avatar_color);
+        partyClient.setPlayerProfile(p.username, p.avatar_color);
+        friendsManager.getPendingRequests().then((reqs) => {
+          setPendingRequestsCount(reqs.length);
+        });
+      }
+    });
+
     if (typeof window !== "undefined") {
-      const savedName = localStorage.getItem("3dminer_player_name");
-      const savedColor = localStorage.getItem("3dminer_player_color");
-      if (savedName) setPlayerName(savedName);
-      if (savedColor) setSelectedColor(savedColor);
+      const savedName = localStorage.getItem("cubomb_player_name") || localStorage.getItem("3dminer_player_name");
+      const savedColor = localStorage.getItem("cubomb_player_color") || localStorage.getItem("3dminer_player_color");
+      if (savedName && !authManager.getProfile()) setPlayerName(savedName);
+      if (savedColor && !authManager.getProfile()) setSelectedColor(savedColor);
 
       // Check URL for ?room=CODE
       const params = new URLSearchParams(window.location.search);
@@ -75,6 +98,19 @@ export const StartMenu: React.FC<StartMenuProps> = ({
       }
     }
   }, []);
+
+  const handleAuthSuccess = () => {
+    const p = authManager.getProfile();
+    if (p) {
+      setProfile(p);
+      setPlayerName(p.username);
+      setSelectedColor(p.avatar_color);
+      partyClient.setPlayerProfile(p.username, p.avatar_color);
+      friendsManager.getPendingRequests().then((reqs) => {
+        setPendingRequestsCount(reqs.length);
+      });
+    }
+  };
 
   const handleNameChange = (val: string) => {
     const cleaned = val.slice(0, 16);
@@ -132,15 +168,71 @@ export const StartMenu: React.FC<StartMenuProps> = ({
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-200 to-blue-300 font-mono">
-                3D MINER
+                CUBOMB
               </h1>
               <p className="text-[11px] text-slate-400 tracking-wide font-medium">
-                Planetary Minesweeper Expedition
+                Planetary Cube Minefield Expedition
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Friends Button (when logged in) */}
+            {profile && (
+              <button
+                onClick={() => {
+                  sound.playClick();
+                  setShowFriendsModal(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-300 hover:text-white hover:bg-purple-900/60 transition-all flex items-center gap-1.5 text-xs font-bold shadow-md shadow-purple-950/40 relative"
+                title="Friends Expedition"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Friends</span>
+                {pendingRequestsCount > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-amber-500 text-[10px] text-slate-950 font-black flex items-center justify-center">
+                    {pendingRequestsCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* User Account / Profile Badge */}
+            {profile ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-cyan-500/30 shadow-md">
+                <div
+                  className="w-2.5 h-2.5 rounded-full border border-white/40 shadow-sm"
+                  style={{ backgroundColor: profile.avatar_color }}
+                />
+                <span className="text-xs font-bold text-white max-w-[90px] truncate">
+                  {profile.username}
+                </span>
+                <button
+                  onClick={async () => {
+                    sound.playClick();
+                    await authManager.signOut();
+                    setProfile(null);
+                  }}
+                  className="text-[10px] text-slate-400 hover:text-rose-400 uppercase font-black ml-1"
+                  title="Sign Out"
+                >
+                  Exit
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  sound.playClick();
+                  setShowAuthModal(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 hover:text-white hover:bg-cyan-900/60 transition-all flex items-center gap-1.5 text-xs font-bold shadow-md shadow-cyan-950/40"
+                title="Sign In or Register"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Account</span>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 sound.playClick();
@@ -407,6 +499,36 @@ export const StartMenu: React.FC<StartMenuProps> = ({
           </div>
         )}
       </div>
+
+      {/* Supabase Free-Tier Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onAuthSuccess={handleAuthSuccess}
+      />
+
+      {/* Friends System Modal */}
+      <FriendsModal
+        isOpen={showFriendsModal}
+        onClose={() => {
+          setShowFriendsModal(false);
+          if (profile) {
+            friendsManager.getPendingRequests().then((r) => setPendingRequestsCount(r.length));
+          }
+        }}
+        onInviteToParty={(friendUsername) => {
+          if (partyClient.session) {
+            if (typeof window !== "undefined") {
+              const url = `${window.location.origin}?room=${partyClient.session.code}`;
+              navigator.clipboard.writeText(url);
+            }
+          } else {
+            setShowFriendsModal(false);
+            setActiveTab("party");
+            setPartyTab("create");
+          }
+        }}
+      />
     </div>
   );
 };

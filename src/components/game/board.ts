@@ -15,6 +15,7 @@ export class BoardManager {
   // Reusable materials
   public matHidden!: THREE.MeshStandardMaterial;
   public matHiddenHover!: THREE.MeshStandardMaterial;
+  public matChordHighlight!: THREE.MeshStandardMaterial;
   public matRevealed!: THREE.MeshStandardMaterial;
   public matFlagged!: THREE.MeshStandardMaterial;
   public matMineCore!: THREE.MeshStandardMaterial;
@@ -41,6 +42,14 @@ export class BoardManager {
       metalness: 0.8,
       emissive: 0x0369a1,
       emissiveIntensity: 0.35,
+    });
+
+    this.matChordHighlight = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8, // Electric azure chord pulse
+      roughness: 0.2,
+      metalness: 0.7,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.55,
     });
 
     this.matRevealed = new THREE.MeshStandardMaterial({

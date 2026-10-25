@@ -1,15 +1,15 @@
 import { PartySession, PartyPlayer, GameMode, Difficulty, DIFFICULTY_PRESETS, FaceDirection } from "@/components/game/types";
 
-// In-memory global store for party rooms
+// In-memory global store for Cubomb party rooms
 declare global {
-  var __3dminer_party_sessions: Map<string, PartySession> | undefined;
+  var __cubomb_party_sessions: Map<string, PartySession> | undefined;
 }
 
-if (!global.__3dminer_party_sessions) {
-  global.__3dminer_party_sessions = new Map<string, PartySession>();
+if (!global.__cubomb_party_sessions) {
+  global.__cubomb_party_sessions = new Map<string, PartySession>();
 }
 
-const sessions = global.__3dminer_party_sessions;
+const sessions = global.__cubomb_party_sessions;
 
 // Clean up stale sessions older than 4 hours
 function cleanStaleSessions() {
@@ -85,9 +85,16 @@ export function getPartySession(code: string): PartySession | null {
   return s || null;
 }
 
-export function joinPartySession(code: string, player: { id: string; name: string; color: string }): PartySession | null {
-  const session = sessions.get(code.toUpperCase());
-  if (!session) return null;
+export function joinPartySession(code: string, player: { id: string; name: string; color: string }): PartySession {
+  let session = sessions.get(code.toUpperCase());
+  if (!session) {
+    session = createPartySession({
+      hostId: player.id,
+      hostName: player.name,
+      hostColor: player.color,
+      code: code.toUpperCase(),
+    });
+  }
 
   if (!session.players[player.id]) {
     const half = Math.floor(session.gridSize / 2);
@@ -150,6 +157,9 @@ export function applyPartyAction(
       break;
 
     case "reveal":
+      if (action.minesLocations && !session.mineLocations) {
+        session.mineLocations = action.minesLocations;
+      }
       if (action.cellId && !session.revealedCells.includes(action.cellId)) {
         session.revealedCells.push(action.cellId);
         if (session.players[action.playerId]) {
@@ -180,6 +190,14 @@ export function applyPartyAction(
       session.revealedCells = [];
       session.flaggedCells = [];
       session.explodedBy = undefined;
+      if (action.minesLocations) {
+        session.mineLocations = action.minesLocations;
+      } else {
+        session.mineLocations = undefined;
+      }
+      Object.values(session.players).forEach((p) => {
+        p.score = 0;
+      });
       break;
 
     case "leave":

@@ -17,7 +17,7 @@ const MinesweeperGame = dynamic(
           </div>
         </div>
         <div className="text-xl font-bold tracking-wider text-cyan-400 animate-pulse">
-          LOADING 3D MINESWEEPER...
+          LOADING CUBOMB...
         </div>
         <p className="text-xs text-slate-500 mt-2">Preparing 3D Cube &amp; Miner Avatar</p>
       </div>

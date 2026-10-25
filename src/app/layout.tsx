@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "3D Minesweeper | Cube Adventure",
+  title: "Cubomb | 3D Planetary Minesweeper",
   description: "A 3D cube minesweeper game with animated character, planetoid exploration, and party multiplayer.",
 };
 

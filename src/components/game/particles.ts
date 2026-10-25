@@ -16,7 +16,7 @@ export class ParticleManager {
   private pointGeometry: THREE.BufferGeometry;
   private pointMaterial: THREE.PointsMaterial;
   private pointsMesh: THREE.Points;
-  private maxParticles = 600;
+  private maxParticles = 1200;
 
   private positions: Float32Array;
   private colors: Float32Array;
@@ -90,6 +90,79 @@ export class ParticleManager {
     }
   }
 
+  // Spawn excavated rock debris and dust cloud
+  public spawnTileExcavation(position: THREE.Vector3, normal: THREE.Vector3, count: number = 18) {
+    const palette = [0x334155, 0x475569, 0x64748b, 0x0284c7, 0x94a3b8];
+    // Rock fragments
+    for (let i = 0; i < count; i++) {
+      if (this.particles.length >= this.maxParticles) break;
+
+      const randVec = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2
+      ).normalize();
+
+      const tangent = new THREE.Vector3().crossVectors(normal, randVec).normalize();
+      const speed = 1.6 + Math.random() * 2.8;
+      const vel = normal.clone().multiplyScalar(1.2 + Math.random() * 1.5).addScaledVector(tangent, speed);
+      const color = new THREE.Color(palette[Math.floor(Math.random() * palette.length)]);
+
+      this.particles.push({
+        pos: position.clone().addScaledVector(normal, 0.12),
+        vel,
+        color,
+        size: 0.16 + Math.random() * 0.18,
+        alpha: 1.0,
+        life: 0,
+        maxLife: 0.45 + Math.random() * 0.35,
+      });
+    }
+
+    // Soft dust cloud
+    const dustCount = 8;
+    for (let i = 0; i < dustCount; i++) {
+      if (this.particles.length >= this.maxParticles) break;
+      const speed = 0.5 + Math.random() * 0.8;
+      const vel = normal.clone().multiplyScalar(speed * 0.7).add(
+        new THREE.Vector3((Math.random() - 0.5) * speed, (Math.random() - 0.5) * speed, (Math.random() - 0.5) * speed)
+      );
+
+      this.particles.push({
+        pos: position.clone().addScaledVector(normal, 0.18),
+        vel,
+        color: new THREE.Color(0x94a3b8),
+        size: 0.35 + Math.random() * 0.35,
+        alpha: 0.55,
+        life: 0,
+        maxLife: 0.55 + Math.random() * 0.35,
+      });
+    }
+  }
+
+  // Spawn subtle dust puffs under feet when running
+  public spawnFootstepDust(position: THREE.Vector3, normal: THREE.Vector3) {
+    if (this.particles.length >= this.maxParticles) return;
+    for (let i = 0; i < 3; i++) {
+      const randVec = new THREE.Vector3(
+        (Math.random() - 0.5),
+        (Math.random() - 0.5),
+        (Math.random() - 0.5)
+      );
+      const tangent = new THREE.Vector3().crossVectors(normal, randVec).normalize();
+
+      this.particles.push({
+        pos: position.clone().addScaledVector(normal, 0.05),
+        vel: tangent.multiplyScalar(0.4 + Math.random() * 0.5),
+        color: new THREE.Color(0x64748b),
+        size: 0.12 + Math.random() * 0.1,
+        alpha: 0.4,
+        life: 0,
+        maxLife: 0.25 + Math.random() * 0.2,
+      });
+    }
+  }
+
   // Spawn violent explosion fireball and debris
   public spawnExplosion(position: THREE.Vector3, count: number = 80) {
     for (let i = 0; i < count; i++) {
@@ -120,8 +193,6 @@ export class ParticleManager {
   }
 
   public update(delta: number) {
-    const gravity = new THREE.Vector3(0, -5.0, 0);
-
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life += delta;
@@ -131,6 +202,8 @@ export class ParticleManager {
         continue;
       }
 
+      // Gravity pulls toward planetary core (0, 0, 0)
+      const gravity = p.pos.clone().negate().normalize().multiplyScalar(4.5);
       p.vel.addScaledVector(gravity, delta);
       p.pos.addScaledVector(p.vel, delta);
       p.alpha = 1 - p.life / p.maxLife;

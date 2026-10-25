@@ -8,6 +8,7 @@ import {
   Volume2,
   VolumeX,
   Compass,
+  Crosshair,
   User,
   HelpCircle,
   Play,
@@ -35,14 +36,10 @@ interface GameHUDProps {
   flagsPlaced: number;
   timeSeconds: number;
   difficulty: Difficulty;
-  interactMode: "reveal" | "flag";
-  followMiner: boolean;
   currentMinerFace?: "top" | "bottom" | "front" | "back" | "left" | "right";
   isMuted: boolean;
-  onSetInteractMode: (mode: "reveal" | "flag") => void;
-  onToggleFollowMiner: () => void;
   onResetCamera: () => void;
-  onCameraPreset: (preset: "front" | "back" | "top" | "bottom" | "left" | "right" | "iso" | "miner") => void;
+  onCameraPreset: (preset: "front" | "back" | "top" | "bottom" | "left" | "right") => void;
   onRestart: () => void;
   onChangeDifficulty: (diff: Difficulty) => void;
   onToggleMute: () => void;
@@ -51,6 +48,7 @@ interface GameHUDProps {
   onStopMove?: () => void;
   onOpenMenu?: () => void;
   partySession?: PartySession | null;
+  currentPlayerId?: string;
   onLeaveParty?: () => void;
 }
 
@@ -61,12 +59,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   flagsPlaced,
   timeSeconds,
   difficulty,
-  interactMode,
-  followMiner,
   currentMinerFace,
   isMuted,
-  onSetInteractMode,
-  onToggleFollowMiner,
   onResetCamera,
   onCameraPreset,
   onRestart,
@@ -77,6 +71,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onStopMove,
   onOpenMenu,
   partySession,
+  currentPlayerId,
   onLeaveParty,
 }) => {
   const [showSettings, setShowSettings] = useState(false);
@@ -110,7 +105,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </div>
             <div>
               <div className="text-sm font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-blue-300">
-                3D MINESWEEPER
+                CUBOMB
               </div>
               <div className="text-[11px] text-slate-400 flex items-center gap-1.5 font-medium">
                 <span className="capitalize text-cyan-400 font-semibold">Cube</span>
@@ -274,119 +269,32 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
       {/* --- BOTTOM FLOATING ACTION DOCK --- */}
       <footer className="flex flex-col items-center gap-3 w-full">
-        <div className="glass-panel px-4 py-2 rounded-2xl pointer-events-auto flex flex-wrap items-center justify-center gap-3 shadow-2xl border border-slate-700/50">
-          {/* Interaction Mode Toggle (Walk / Reveal vs Flag Mode) */}
-          <div className="flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-700/60 shadow-inner">
-            <button
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                (e.currentTarget as HTMLElement)?.blur();
-              }}
-              onClick={(e) => {
-                (e.currentTarget as HTMLElement)?.blur();
-                sound.playClick();
-                onSetInteractMode("reveal");
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                interactMode === "reveal"
-                  ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md shadow-cyan-900/30 font-bold"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              title="Walk & Step Mode: Walk onto tiles to reveal them"
-            >
-              <Gamepad2 className="w-3.5 h-3.5" />
-              <span>Walk</span>
-            </button>
+        <div className="glass-panel px-3 py-2 rounded-2xl pointer-events-auto flex items-center justify-center gap-2.5 shadow-2xl border border-slate-700/50">
+          {/* Reset Camera to Fixed 3rd-Person View */}
+          <button
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              (e.currentTarget as HTMLElement)?.blur();
+            }}
+            onClick={(e) => {
+              (e.currentTarget as HTMLElement)?.blur();
+              sound.playClick();
+              onResetCamera();
+            }}
+            className="px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/60 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors flex items-center gap-1.5 text-xs font-semibold"
+            title="Reset to 3rd-person view behind miner"
+          >
+            <Crosshair className="w-4 h-4 text-cyan-400" />
+            <span className="hidden sm:inline">Reset View</span>
+          </button>
 
-            <button
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                (e.currentTarget as HTMLElement)?.blur();
-              }}
-              onClick={(e) => {
-                (e.currentTarget as HTMLElement)?.blur();
-                sound.playClick();
-                onSetInteractMode("flag");
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                interactMode === "flag"
-                  ? "bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md shadow-amber-950/40 font-bold"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              title="Flag Mode: Click or tap any tile anywhere to flag it"
-            >
-              <Flag className="w-3.5 h-3.5" />
-              <span>Flag</span>
-            </button>
-          </div>
+          <div className="h-5 w-[1px] bg-slate-700/60 hidden md:block" />
 
-          <div className="h-6 w-[1px] bg-slate-700/60 hidden sm:block" />
-
-          {/* Camera & Miner Controls */}
-          <div className="flex items-center gap-1.5">
-            <button
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                (e.currentTarget as HTMLElement)?.blur();
-              }}
-              onClick={(e) => {
-                (e.currentTarget as HTMLElement)?.blur();
-                sound.playClick();
-                onToggleFollowMiner();
-              }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors border ${
-                followMiner
-                  ? "bg-cyan-500/20 border-cyan-400/50 text-cyan-300"
-                  : "bg-slate-800/60 border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-800"
-              }`}
-              title="Camera follows miner avatar"
-            >
-              <User className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Track Miner</span>
-            </button>
-
-            <button
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                (e.currentTarget as HTMLElement)?.blur();
-              }}
-              onClick={(e) => {
-                (e.currentTarget as HTMLElement)?.blur();
-                sound.playClick();
-                onResetCamera();
-              }}
-              className="p-2 rounded-xl bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-              title="Reset Orbit Camera"
-            >
-              <Compass className="w-4 h-4" />
-            </button>
-
-            {/* Quick Face Presets */}
-            <div className="hidden md:flex items-center gap-1 text-[11px] font-semibold text-slate-400 bg-slate-900/60 p-1 rounded-xl border border-slate-800">
-              {(["top", "front", "right", "back", "left", "bottom"] as const).map((face) => (
-                <button
-                  key={face}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    (e.currentTarget as HTMLElement)?.blur();
-                  }}
-                  onClick={(e) => {
-                    (e.currentTarget as HTMLElement)?.blur();
-                    sound.playClick();
-                    onCameraPreset(face);
-                  }}
-                  className={`px-2 py-1 rounded-lg capitalize transition-all ${
-                    currentMinerFace === face
-                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 font-bold"
-                      : "hover:bg-slate-800 hover:text-white"
-                  }`}
-                  title={`View ${face} face`}
-                >
-                  {face}
-                </button>
-              ))}
-              <div className="h-4 w-[1px] bg-slate-700/60 mx-0.5" />
+          {/* Quick Face Presets */}
+          <div className="hidden md:flex items-center gap-1 text-[11px] font-semibold text-slate-400 bg-slate-900/60 p-1 rounded-xl border border-slate-800">
+            {(["top", "front", "right", "back", "left", "bottom"] as const).map((face) => (
               <button
+                key={face}
                 onPointerDown={(e) => {
                   e.stopPropagation();
                   (e.currentTarget as HTMLElement)?.blur();
@@ -394,30 +302,18 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 onClick={(e) => {
                   (e.currentTarget as HTMLElement)?.blur();
                   sound.playClick();
-                  onCameraPreset("iso");
+                  onCameraPreset(face);
                 }}
-                className="px-2 py-1 rounded-lg hover:bg-slate-800 hover:text-white transition-colors"
-                title="Isometric 3D Orbit"
+                className={`px-2 py-1 rounded-lg capitalize transition-all ${
+                  currentMinerFace === face
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 font-bold"
+                    : "hover:bg-slate-800 hover:text-white"
+                }`}
+                title={`View ${face} face`}
               >
-                Iso
+                {face}
               </button>
-              <button
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  (e.currentTarget as HTMLElement)?.blur();
-                }}
-                onClick={(e) => {
-                  (e.currentTarget as HTMLElement)?.blur();
-                  sound.playClick();
-                  onCameraPreset("miner");
-                }}
-                className="px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 transition-colors flex items-center gap-1 font-bold"
-                title="Focus Camera directly on Miner"
-              >
-                <User className="w-3 h-3" />
-                <span>Focus</span>
-              </button>
-            </div>
+            ))}
           </div>
         </div>
 
@@ -425,7 +321,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         <div className="text-[11px] text-slate-400/80 tracking-wide font-medium hidden sm:flex items-center gap-3 bg-slate-950/70 backdrop-blur-md px-4 py-1.5 rounded-full border border-slate-800/60 shadow-lg">
           <span>WASD / Arrows: <b className="text-slate-200">Walk</b></span>
           <span>•</span>
-          <span>Right-Click / F: <b className="text-amber-300">Flag Anywhere</b></span>
+          <span>Click / Tap: <b className="text-amber-300">Flag Tile</b></span>
           <span>•</span>
           <span>Click Number: <b className="text-cyan-300">Chord</b></span>
         </div>
@@ -517,7 +413,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         </div>
       </div>
 
-      {/* Right Thumb: Dedicated Flag Button (Toggle Flag Mode Anywhere) */}
+      {/* Right Thumb: Mobile Quick Reset View Button */}
       <div className="sm:hidden absolute bottom-20 right-4 pointer-events-auto flex flex-col gap-2.5 items-end select-none">
         <button
           onPointerDown={(e) => {
@@ -527,19 +423,15 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           onClick={(e) => {
             (e.currentTarget as HTMLElement)?.blur();
             sound.playClick();
-            onSetInteractMode(interactMode === "flag" ? "reveal" : "flag");
+            onResetCamera();
           }}
-          className={`w-16 h-16 rounded-2xl border font-bold flex flex-col items-center justify-center shadow-2xl active:scale-90 transition-all ${
-            interactMode === "flag"
-              ? "bg-gradient-to-tr from-amber-500 to-orange-500 border-amber-300 text-white ring-4 ring-amber-500/40"
-              : "bg-slate-900/90 border-slate-700 text-slate-300 hover:text-white"
-          }`}
-          title="Toggle Flag Mode Anywhere"
-          aria-label="Toggle Flag Mode Anywhere"
+          className="w-14 h-14 rounded-2xl border border-slate-700/80 bg-slate-900/90 text-cyan-300 flex flex-col items-center justify-center shadow-2xl active:scale-95 transition-all"
+          title="Reset View"
+          aria-label="Reset View"
         >
-          <Flag className={`w-6 h-6 ${interactMode === "flag" ? "text-white" : "text-amber-400"}`} />
-          <span className="text-[10px] font-black uppercase mt-1 tracking-wider">
-            {interactMode === "flag" ? "Flag ON" : "Flag"}
+          <Crosshair className="w-5 h-5 text-cyan-400" />
+          <span className="text-[9px] font-bold uppercase mt-0.5 tracking-wider text-slate-300">
+            View
           </span>
         </button>
       </div>
@@ -672,7 +564,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200 mb-1">
               MISSION COMPLETE!
             </h2>
-            <p className="text-xs text-slate-400 mb-4">You cleared all mines on the cube without a scratch!</p>
+            <p className="text-xs text-slate-400 mb-4">
+              {partySession
+                ? "Your expedition crew successfully cleared the planetary cube together!"
+                : "You cleared all mines on the cube without a scratch!"}
+            </p>
 
             <div className="bg-slate-900/60 rounded-xl p-3 mb-5 border border-slate-800 flex justify-around">
               <div>
@@ -686,15 +582,33 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={() => {
-                sound.playClick();
-                onRestart();
-              }}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-sm shadow-lg shadow-emerald-900/40 transition-all flex items-center justify-center gap-2"
-            >
-              <RotateCcw className="w-4 h-4" /> Play Again
-            </button>
+            {partySession && partySession.hostId !== currentPlayerId ? (
+              <div className="space-y-2">
+                <div className="bg-slate-900/70 p-2.5 rounded-xl border border-slate-800 text-xs text-slate-400 font-medium">
+                  Waiting for party host to launch next expedition...
+                </div>
+                <button
+                  onClick={() => {
+                    sound.playClick();
+                    onLeaveParty?.();
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors"
+                >
+                  Leave Party
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  sound.playClick();
+                  onRestart();
+                }}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-sm shadow-lg shadow-emerald-900/40 transition-all flex items-center justify-center gap-2"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>{partySession ? "Start Next Party Expedition" : "Play Again"}</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -708,17 +622,39 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-400 mb-1">
               DETONATION!
             </h2>
-            <p className="text-xs text-slate-400 mb-4">You struck a hidden mine. Don&apos;t give up, Commander!</p>
+            <p className="text-xs text-slate-400 mb-4">
+              {partySession?.explodedBy
+                ? `Detonated by explorer ${partySession.explodedBy}!`
+                : "You struck a hidden mine. Don't give up, Commander!"}
+            </p>
 
-            <button
-              onClick={() => {
-                sound.playClick();
-                onRestart();
-              }}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold text-sm shadow-lg shadow-red-900/40 transition-all flex items-center justify-center gap-2"
-            >
-              <RotateCcw className="w-4 h-4" /> Try Again
-            </button>
+            {partySession && partySession.hostId !== currentPlayerId ? (
+              <div className="space-y-2">
+                <div className="bg-slate-900/70 p-2.5 rounded-xl border border-slate-800 text-xs text-slate-400 font-medium">
+                  Waiting for party host to reset expedition...
+                </div>
+                <button
+                  onClick={() => {
+                    sound.playClick();
+                    onLeaveParty?.();
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors"
+                >
+                  Leave Party
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  sound.playClick();
+                  onRestart();
+                }}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold text-sm shadow-lg shadow-red-900/40 transition-all flex items-center justify-center gap-2"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>{partySession ? "Reset Party Expedition" : "Try Again"}</span>
+              </button>
+            )}
           </div>
         </div>
       )}

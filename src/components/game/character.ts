@@ -32,6 +32,7 @@ export class MinerAvatar {
   public onFaceChange?: (face: SurfaceCoord["face"]) => void;
   public canStepTo?: (coord: SurfaceCoord) => boolean;
   public onLandOnCoord?: (coord: SurfaceCoord) => void;
+  public onFootstep?: (pos: THREE.Vector3, normal: THREE.Vector3) => void;
 
   // Continuous 3D Movement (Roblox bLockerman style)
   public currentPosition: THREE.Vector3 = new THREE.Vector3();
@@ -568,11 +569,14 @@ export class MinerAvatar {
       // Smoothly turn body towards walking direction
       this.orientAvatar(walkDir, this.currentNormal, delta);
 
-      // Periodic natural footstep sound
+      // Periodic natural footstep sound and foot dust
       this.footstepTimer += delta;
       if (this.footstepTimer >= 0.48) {
         this.footstepTimer = 0;
         sound.playStep();
+        if (this.onFootstep) {
+          this.onFootstep(this.currentPosition, this.currentNormal);
+        }
       }
     } else {
       if (this.action === "walk") {

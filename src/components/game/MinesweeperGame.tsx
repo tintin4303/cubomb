@@ -21,6 +21,7 @@ import { PartyLobbyModal } from "./PartyLobbyModal";
 import { partyClient } from "@/lib/partyClient";
 import { PartySession } from "./types";
 import { createNameplateSprite } from "./character";
+import { authManager } from "@/lib/authManager";
 
 export const MinesweeperGame: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +57,7 @@ export const MinesweeperGame: React.FC = () => {
 
   const cellsGroupRef = useRef<THREE.Group>(new THREE.Group());
   const hoveredCellRef = useRef<CellData | null>(null);
+  const chordHighlightedCellsRef = useRef<CellData[]>([]);
   const isDraggingRef = useRef<boolean>(false);
   const lastManualControlTimeRef = useRef<number>(0);
   const clickStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -114,6 +116,9 @@ export const MinesweeperGame: React.FC = () => {
         explodedBy: win ? undefined : partyClient.playerName,
       });
     }
+
+    // Record game result to Supabase (stays within free tier)
+    authManager.recordGameResult(difficulty, timeSeconds, win);
 
     if (win) {
       sound.playWin();
@@ -188,7 +193,7 @@ export const MinesweeperGame: React.FC = () => {
       }
 
       // Animate Miner Digging
-      if (miner && cell.mesh) {
+      if (broadcast && miner && cell.mesh) {
         miner.triggerDig(() => {
           if (particles && cell.mesh) {
             particles.spawnDigSparks(cell.mesh.position);
@@ -198,8 +203,12 @@ export const MinesweeperGame: React.FC = () => {
 
       cell.isRevealed = true;
 
-      // Visual removal of unrevealed block
+      // Visual removal of unrevealed block and excavation burst
       if (cell.mesh) {
+        if (particles) {
+          const norm = cell.face && miner ? miner.getFaceNormal(cell.face) : new THREE.Vector3(0, 1, 0);
+          particles.spawnTileExcavation(cell.mesh.position, norm);
+        }
         cell.mesh.visible = false;
         cell.mesh.removeFromParent();
       }
@@ -264,6 +273,10 @@ export const MinesweeperGame: React.FC = () => {
               neighbor.isRevealed = true;
 
               if (neighbor.mesh) {
+                if (particles) {
+                  const norm = neighbor.face && miner ? miner.getFaceNormal(neighbor.face) : new THREE.Vector3(0, 1, 0);
+                  particles.spawnTileExcavation(neighbor.mesh.position, norm, 10);
+                }
                 neighbor.mesh.visible = false;
                 neighbor.mesh.removeFromParent();
               }
@@ -440,21 +453,60 @@ export const MinesweeperGame: React.FC = () => {
     rimLight.position.set(0, 0, 0);
     scene.add(rimLight);
 
-    // 5. Starfield Background
-    const starGeo = new THREE.BufferGeometry();
-    const starCount = 1000;
+    // 5. Starfield Background (Deep Space Nebula & Multi-Colored Twinkling Stars)
+    const starCount = 1400;
     const starPositions = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount * 3; i += 3) {
-      starPositions[i] = (Math.random() - 0.5) * 180;
-      starPositions[i + 1] = (Math.random() - 0.5) * 180;
-      starPositions[i + 2] = (Math.random() - 0.5) * 180;
+    const starColors = new Float32Array(starCount * 3);
+    const starPalette = [
+      new THREE.Color(0xffffff),
+      new THREE.Color(0x38bdf8),
+      new THREE.Color(0xa78bfa),
+      new THREE.Color(0xfde047),
+      new THREE.Color(0x67e8f9),
+    ];
+
+    for (let i = 0; i < starCount; i++) {
+      const idx = i * 3;
+      const radius = 60 + Math.random() * 80;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 2 - 1);
+
+      starPositions[idx] = radius * Math.sin(phi) * Math.cos(theta);
+      starPositions[idx + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      starPositions[idx + 2] = radius * Math.cos(phi);
+
+      const col = starPalette[Math.floor(Math.random() * starPalette.length)];
+      const brightness = 0.5 + Math.random() * 0.5;
+      starColors[idx] = col.r * brightness;
+      starColors[idx + 1] = col.g * brightness;
+      starColors[idx + 2] = col.b * brightness;
     }
+
+    const starGeo = new THREE.BufferGeometry();
     starGeo.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
+    starGeo.setAttribute("color", new THREE.BufferAttribute(starColors, 3));
+
+    const starCanvas = document.createElement("canvas");
+    starCanvas.width = 16;
+    starCanvas.height = 16;
+    const sCtx = starCanvas.getContext("2d");
+    if (sCtx) {
+      const grad = sCtx.createRadialGradient(8, 8, 0, 8, 8, 8);
+      grad.addColorStop(0, "rgba(255, 255, 255, 1)");
+      grad.addColorStop(0.4, "rgba(255, 255, 255, 0.6)");
+      grad.addColorStop(1, "rgba(255, 255, 255, 0)");
+      sCtx.fillStyle = grad;
+      sCtx.fillRect(0, 0, 16, 16);
+    }
+    const starTexture = new THREE.CanvasTexture(starCanvas);
+
     const starMat = new THREE.PointsMaterial({
-      color: 0x94a3b8,
-      size: 0.35,
+      size: 0.55,
+      vertexColors: true,
+      map: starTexture,
       transparent: true,
-      opacity: 0.75,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
     });
     scene.add(new THREE.Points(starGeo, starMat));
 
@@ -582,18 +634,21 @@ export const MinesweeperGame: React.FC = () => {
         revealCellRef.current(cell);
       }
     };
+    miner.onFootstep = (pos, norm) => {
+      particleManagerRef.current?.spawnFootstepDust(pos, norm);
+    };
     minerAvatarRef.current = miner;
     scene.add(miner.group);
     setMinerFace(randomFace);
 
-    // Orient camera immediately in third-person directly framing the miner
+    // Orient camera immediately in fixed third-person view directly behind the miner
     const normal = miner.currentNormal;
-    const worldUp = Math.abs(normal.y) > 0.8 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
-    const tilt = worldUp.clone().projectOnPlane(normal).normalize().multiplyScalar(0.42);
-    const targetDir = normal.clone().multiplyScalar(0.85).add(tilt).normalize();
-    camera.up.copy(worldUp);
-    camera.position.copy(miner.group.position).add(targetDir.multiplyScalar(camDist));
-    controlsTargetRef.current.copy(miner.group.position);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(miner.group.quaternion).normalize();
+    const camDistBehind = 4.6;
+    const camOffset = fwd.clone().multiplyScalar(-camDistBehind).addScaledVector(normal, 2.2);
+    camera.position.copy(miner.group.position).add(camOffset);
+    camera.up.copy(normal);
+    controlsTargetRef.current.copy(miner.group.position).addScaledVector(normal, 0.6);
     camera.lookAt(controlsTargetRef.current);
 
     // Auto-reveal starting cell to open the safe opening cluster immediately
@@ -619,6 +674,7 @@ export const MinesweeperGame: React.FC = () => {
     window.addEventListener("resize", handleResize);
     return () => {
       window.removeEventListener("resize", handleResize);
+      sound.stopAmbient();
     };
   }, [initGame]);
 
@@ -843,6 +899,23 @@ export const MinesweeperGame: React.FC = () => {
       lastY = e.clientY;
       totalDrag = 0;
       downButton = e.button;
+      sound.startAmbient();
+    };
+
+    const resetHoverHighlights = () => {
+      if (!boardManagerRef.current) return;
+      if (hoveredCellRef.current && hoveredCellRef.current.mesh && !hoveredCellRef.current.isFlagged) {
+        hoveredCellRef.current.mesh.material = boardManagerRef.current.matHidden;
+        hoveredCellRef.current = null;
+      }
+      if (chordHighlightedCellsRef.current.length > 0) {
+        chordHighlightedCellsRef.current.forEach((c) => {
+          if (!c.isRevealed && !c.isFlagged && c.mesh) {
+            c.mesh.material = boardManagerRef.current!.matHidden;
+          }
+        });
+        chordHighlightedCellsRef.current = [];
+      }
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -851,8 +924,8 @@ export const MinesweeperGame: React.FC = () => {
       pointerRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       pointerRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-      // Handle Camera Drag (Only on Left Click or Touch Drag, Never on Right Click)
-      if (isDown && downButton === 0) {
+      // Handle Camera Drag for Left, Middle, Right click, and Touch drag
+      if (isDown) {
         const dx = e.clientX - lastX;
         const dy = e.clientY - lastY;
         totalDrag += Math.hypot(dx, dy);
@@ -883,6 +956,9 @@ export const MinesweeperGame: React.FC = () => {
         return;
       }
 
+      // Reset previous hover and chord highlights
+      resetHoverHighlights();
+
       // Hover Raycasting
       raycasterRef.current.setFromCamera(pointerRef.current, cameraRef.current);
       const visibleMeshes: THREE.Mesh[] = [];
@@ -894,11 +970,6 @@ export const MinesweeperGame: React.FC = () => {
 
       const intersects = raycasterRef.current.intersectObjects(visibleMeshes, false);
 
-      // Reset previous hover
-      if (hoveredCellRef.current && hoveredCellRef.current.mesh && !hoveredCellRef.current.isFlagged) {
-        hoveredCellRef.current.mesh.material = boardManagerRef.current.matHidden;
-      }
-
       if (intersects.length > 0) {
         const hitMesh = intersects[0].object as THREE.Mesh;
         const cellId = hitMesh.userData.cellId;
@@ -907,11 +978,43 @@ export const MinesweeperGame: React.FC = () => {
         if (cell && !cell.isFlagged) {
           hitMesh.material = boardManagerRef.current.matHiddenHover;
           hoveredCellRef.current = cell;
-        } else {
-          hoveredCellRef.current = null;
         }
       } else {
-        hoveredCellRef.current = null;
+        // Check for Chord Preview Hover on already revealed numbered cells
+        const revealedTargets: THREE.Object3D[] = [];
+        boardManagerRef.current.cells.forEach((c) => {
+          if (c.isRevealed && c.neighborMines > 0) {
+            if (c.sprite) revealedTargets.push(c.sprite);
+            if (c.bedrockMesh) revealedTargets.push(c.bedrockMesh);
+          }
+        });
+
+        const revealedHits = raycasterRef.current.intersectObjects(revealedTargets, true);
+        if (revealedHits.length > 0) {
+          let hitObj: THREE.Object3D | null = revealedHits[0].object;
+          let cellId: string | null = null;
+          while (hitObj) {
+            if (hitObj.userData?.cellId) {
+              cellId = hitObj.userData.cellId;
+              break;
+            }
+            hitObj = hitObj.parent;
+          }
+          if (cellId) {
+            const cell = boardManagerRef.current.cellMap.get(cellId);
+            if (cell && cell.isRevealed && cell.neighborMines > 0) {
+              const neighbors = boardManagerRef.current.getNeighbors(cell);
+              const toHighlight: CellData[] = [];
+              neighbors.forEach((n) => {
+                if (!n.isRevealed && !n.isFlagged && n.mesh) {
+                  n.mesh.material = boardManagerRef.current!.matChordHighlight;
+                  toHighlight.push(n);
+                }
+              });
+              chordHighlightedCellsRef.current = toHighlight;
+            }
+          }
+        }
       }
     };
 
@@ -922,8 +1025,8 @@ export const MinesweeperGame: React.FC = () => {
 
       if (!wasDown) return;
 
-      // If dragged more than 5px, it was a camera rotate, not a click!
-      if (totalDrag > 5) {
+      // If dragged more than 4px, it was a camera rotate, not a click!
+      if (totalDrag > 4) {
         lastManualControlTimeRef.current = performance.now();
         return;
       }
@@ -950,14 +1053,8 @@ export const MinesweeperGame: React.FC = () => {
         const cell = boardManagerRef.current.cellMap.get(cellId);
         if (!cell) return;
 
-        const isRightClick = e.button === 2;
-        const shouldFlag = isRightClick || interactModeRef.current === "flag";
-
-        if (shouldFlag) {
-          toggleFlagRef.current(cell);
-        }
-        // In walk mode, movement is strictly restricted to joypad or WASD.
-        // Left-clicking does not trigger character navigation.
+        // Flag mode is default: clicking or tapping any unopened cell toggles flag
+        toggleFlagRef.current(cell);
       } else {
         // Check for Chording on already revealed numbered cells
         const revealedTargets: THREE.Object3D[] = [];
@@ -1020,6 +1117,7 @@ export const MinesweeperGame: React.FC = () => {
 
     container.addEventListener("pointerdown", onPointerDown);
     container.addEventListener("pointermove", onPointerMove);
+    container.addEventListener("pointerleave", resetHoverHighlights);
     window.addEventListener("pointerup", onPointerUp);
     container.addEventListener("wheel", onWheel, { passive: false });
     container.addEventListener("contextmenu", onContextMenu);
@@ -1027,6 +1125,7 @@ export const MinesweeperGame: React.FC = () => {
     return () => {
       container.removeEventListener("pointerdown", onPointerDown);
       container.removeEventListener("pointermove", onPointerMove);
+      container.removeEventListener("pointerleave", resetHoverHighlights);
       window.removeEventListener("pointerup", onPointerUp);
       container.removeEventListener("wheel", onWheel);
       container.removeEventListener("contextmenu", onContextMenu);
@@ -1035,16 +1134,24 @@ export const MinesweeperGame: React.FC = () => {
 
   // --- Camera Presets ---
   const handleResetCamera = () => {
-    if (!cameraRef.current) return;
-    const camDist = currentConfig.gridSize * 2.8;
-    controlsTargetRef.current.set(0, 0, 0);
-    cameraRef.current.up.set(0, 1, 0);
-    cameraRef.current.position.set(camDist, camDist * 0.9, camDist * 1.2);
+    if (!cameraRef.current || !minerAvatarRef.current) return;
+    const miner = minerAvatarRef.current;
+    const minerPos = miner.group.position;
+    const normal = miner.currentNormal;
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(miner.group.quaternion).normalize();
+
+    // Fixed third-person view directly behind miner like in FPS / action games
+    const dist = 4.6;
+    const camOffset = fwd.clone().multiplyScalar(-dist).addScaledVector(normal, 2.2);
+    cameraRef.current.position.copy(minerPos).add(camOffset);
+    cameraRef.current.up.copy(normal);
+    controlsTargetRef.current.copy(minerPos).addScaledVector(normal, 0.6);
     cameraRef.current.lookAt(controlsTargetRef.current);
+    lastManualControlTimeRef.current = performance.now();
   };
 
   const handleCameraPreset = (
-    preset: "front" | "back" | "top" | "bottom" | "left" | "right" | "iso" | "miner"
+    preset: "front" | "back" | "top" | "bottom" | "left" | "right"
   ) => {
     if (!cameraRef.current) return;
     const dist = currentConfig.gridSize * 3.2;
@@ -1085,25 +1192,6 @@ export const MinesweeperGame: React.FC = () => {
         cameraRef.current.up.set(0, 1, 0);
         cameraRef.current.position.set(dist, 0, 0);
         cameraRef.current.lookAt(controlsTargetRef.current);
-        break;
-      case "iso":
-        controlsTargetRef.current.set(0, 0, 0);
-        cameraRef.current.up.set(0, 1, 0);
-        cameraRef.current.position.set(dist * 0.75, dist * 0.75, dist * 0.75);
-        cameraRef.current.lookAt(controlsTargetRef.current);
-        break;
-      case "miner":
-        if (minerAvatarRef.current) {
-          const minerPos = minerAvatarRef.current.group.position;
-          const normal = minerAvatarRef.current.currentNormal;
-          controlsTargetRef.current.copy(minerPos);
-          const worldUp = Math.abs(normal.y) > 0.8 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
-          cameraRef.current.up.copy(worldUp);
-          const tilt = worldUp.clone().projectOnPlane(normal).normalize().multiplyScalar(0.42);
-          const targetDir = normal.clone().multiplyScalar(0.85).add(tilt).normalize();
-          cameraRef.current.position.copy(controlsTargetRef.current.clone().add(targetDir.multiplyScalar(dist * 0.85)));
-          cameraRef.current.lookAt(controlsTargetRef.current);
-        }
         break;
     }
     lastManualControlTimeRef.current = performance.now();
@@ -1189,8 +1277,13 @@ export const MinesweeperGame: React.FC = () => {
         handleGameOverRef.current(true, false);
       } else if (sess.gameState === "lost" && gameStateRef.current !== "lost") {
         handleGameOverRef.current(false, false);
-      } else if (sess.gameState === "playing" && showLobbyModal) {
-        setShowLobbyModal(false);
+      } else if (sess.gameState === "playing") {
+        if (showLobbyModal) {
+          setShowLobbyModal(false);
+        }
+        if (gameStateRef.current === "won" || gameStateRef.current === "lost") {
+          initGame(sess.mode, sess.difficulty);
+        }
       }
     });
 
@@ -1322,15 +1415,20 @@ export const MinesweeperGame: React.FC = () => {
         flagsPlaced={flagsPlaced}
         timeSeconds={timeSeconds}
         difficulty={difficulty}
-        interactMode={interactMode}
-        followMiner={followMiner}
         currentMinerFace={minerFace}
         isMuted={isMuted}
-        onSetInteractMode={handleSetInteractMode}
-        onToggleFollowMiner={() => setFollowMiner(!followMiner)}
         onResetCamera={handleResetCamera}
         onCameraPreset={handleCameraPreset}
-        onRestart={() => initGame()}
+        onRestart={() => {
+          if (partySession) {
+            if (partySession.hostId === partyClient.playerId) {
+              partyClient.sendAction({ type: "reset" });
+              initGame(partySession.mode, partySession.difficulty);
+            }
+          } else {
+            initGame();
+          }
+        }}
         onChangeDifficulty={(d) => {
           setDifficulty(d);
         }}
@@ -1343,6 +1441,7 @@ export const MinesweeperGame: React.FC = () => {
         onStopMove={handleStopMove}
         onOpenMenu={() => setShowStartMenu(true)}
         partySession={partySession}
+        currentPlayerId={partyClient.playerId}
         onLeaveParty={handleLeaveParty}
       />
 

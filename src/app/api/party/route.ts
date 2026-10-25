@@ -22,10 +22,6 @@ export async function POST(req: NextRequest) {
       if (!code) {
         return NextResponse.json({ success: false, error: "Room code required" }, { status: 400 });
       }
-      const existing = getPartySession(code);
-      if (!existing) {
-        return NextResponse.json({ success: false, error: "Room not found" }, { status: 404 });
-      }
       const session = joinPartySession(code, {
         id: playerId || `player_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         name: playerName || "Miner",
