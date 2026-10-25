@@ -270,6 +270,21 @@ class PartyClient {
       if (data.facing !== undefined) player.facing = data.facing;
       player.action = data.action;
       player.lastPing = Date.now();
+    } else {
+      const half = Math.floor(this.session.gridSize / 2);
+      this.session.players[data.playerId] = {
+        id: data.playerId,
+        name: "Explorer",
+        color: "#10b981",
+        isHost: false,
+        coord: data.coord || { face: "top", u: half, v: half },
+        position: data.position,
+        normal: data.normal,
+        facing: data.facing || 0,
+        action: data.action || "idle",
+        score: 0,
+        lastPing: Date.now(),
+      };
     }
   }
 
@@ -428,6 +443,31 @@ class PartyClient {
     this.broadcastLocally();
     this.notify();
 
+    // Persist to Supabase party_rooms table across all Vercel instances
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase
+        .from("party_rooms")
+        .upsert({
+          code,
+          host_id: this.playerId,
+          host_name: this.playerName,
+          host_color: this.playerColor,
+          mode,
+          difficulty: diff,
+          grid_size: cfg.gridSize,
+          mines: cfg.mines,
+          game_state: "lobby",
+          updated_at: new Date().toISOString(),
+        })
+        .then(
+          ({ error }) => {
+            if (error) console.warn("Notice: party_rooms table update:", error.message);
+          },
+          () => {}
+        );
+    }
+
     // Register with serverless API in background as fallback store
     fetch("/api/party", {
       method: "POST",
@@ -487,6 +527,58 @@ class PartyClient {
     this.startSync();
     this.broadcastLocally();
     this.notify();
+
+    // Query Supabase party_rooms table for persistent session info
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data: dbRoom } = await supabase
+          .from("party_rooms")
+          .select("*")
+          .eq("code", cleanCode)
+          .maybeSingle();
+
+        if (dbRoom) {
+          const cfg = DIFFICULTY_PRESETS[dbRoom.difficulty as Difficulty] || DIFFICULTY_PRESETS.medium;
+          const half = Math.floor((dbRoom.grid_size || cfg.gridSize) / 2);
+          this.session = {
+            code: cleanCode,
+            hostId: dbRoom.host_id,
+            gameState: dbRoom.game_state || "lobby",
+            mode: dbRoom.mode || "surface",
+            difficulty: dbRoom.difficulty || "medium",
+            gridSize: dbRoom.grid_size || cfg.gridSize,
+            mines: dbRoom.mines || cfg.mines,
+            revealedCells: dbRoom.revealed_cells || [],
+            flaggedCells: dbRoom.flagged_cells || [],
+            mineLocations: dbRoom.mine_locations || undefined,
+            explodedBy: dbRoom.exploded_by || undefined,
+            players: {
+              ...(this.session?.players || {}),
+              [this.playerId]: {
+                id: this.playerId,
+                name: this.playerName,
+                color: this.playerColor,
+                isHost: dbRoom.host_id === this.playerId,
+                coord: { face: "top" as FaceDirection, u: half, v: half },
+                position: { x: 0, y: half * 1.1 + 0.5, z: 0 },
+                normal: { x: 0, y: 1, z: 0 },
+                facing: 0,
+                action: "idle",
+                score: 0,
+                lastPing: Date.now(),
+              },
+            },
+            createdAt: new Date(dbRoom.created_at).getTime() || Date.now(),
+            updatedAt: Date.now(),
+          };
+          this.broadcastLocally();
+          this.notify();
+        }
+      } catch (err) {
+        console.warn("party_rooms query notice:", err);
+      }
+    }
 
     // Query API in parallel to populate room configuration
     try {
@@ -571,7 +663,27 @@ class PartyClient {
       });
     }
 
-    // 3. Sync to API route as persistent fallback
+    // 3. Update Supabase party_rooms row for state persistence
+    const supabase = getSupabaseClient();
+    if (supabase && this.session) {
+      supabase
+        .from("party_rooms")
+        .update({
+          game_state: this.session.gameState,
+          mine_locations: this.session.mineLocations || [],
+          revealed_cells: this.session.revealedCells || [],
+          flagged_cells: this.session.flaggedCells || [],
+          exploded_by: this.session.explodedBy || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("code", this.session.code)
+        .then(
+          () => {},
+          () => {}
+        );
+    }
+
+    // 4. Sync to API route as persistent fallback
     try {
       fetch(`/api/party/${this.session.code}`, {
         method: "POST",

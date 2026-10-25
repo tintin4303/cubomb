@@ -22,6 +22,8 @@ import { partyClient } from "@/lib/partyClient";
 import { PartySession } from "./types";
 import { createNameplateSprite } from "./character";
 import { authManager } from "@/lib/authManager";
+import { friendsManager } from "@/lib/friendsManager";
+import { Users, Check, X } from "lucide-react";
 
 export const MinesweeperGame: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,6 +41,7 @@ export const MinesweeperGame: React.FC = () => {
   const [showStartMenu, setShowStartMenu] = useState<boolean>(true);
   const [showLobbyModal, setShowLobbyModal] = useState<boolean>(false);
   const [partySession, setPartySession] = useState<PartySession | null>(null);
+  const [incomingInvite, setIncomingInvite] = useState<{ id: string; from_username: string; room_code: string } | null>(null);
   const remoteAvatarsRef = useRef<Map<string, { avatar: MinerAvatar; nameplate: THREE.Sprite }>>(new Map());
 
   // Counters
@@ -604,12 +607,37 @@ export const MinesweeperGame: React.FC = () => {
       cell.mesh = mesh;
     });
 
-    // 9. Miner Avatar - Random Planet Spawn & Auto-Opening (bLockerman style)
-    const faces: FaceDirection[] = ["top", "front", "right", "back", "left", "bottom"];
-    const randomFace = faces[Math.floor(Math.random() * faces.length)];
-    const randomU = Math.floor(Math.random() * N);
-    const randomV = Math.floor(Math.random() * N);
-    const spawnCoord: SurfaceCoord = { face: randomFace, u: randomU, v: randomV };
+    // 9. Miner Avatar Placement
+    const isParty = !!partyClient.session;
+    let spawnCoord: SurfaceCoord;
+
+    if (isParty) {
+      // Coordinated Party Landing Zone at top face center
+      const center = Math.floor(N / 2);
+      const offsets = [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+        [0, -1],
+        [1, 1],
+        [-1, 1],
+        [1, -1],
+      ];
+      const playerList = Object.keys(partyClient.session?.players || {});
+      const pIdx = Math.max(0, playerList.indexOf(partyClient.playerId));
+      const [du, dv] = offsets[pIdx % offsets.length];
+      const safeU = Math.max(0, Math.min(N - 1, center + du));
+      const safeV = Math.max(0, Math.min(N - 1, center + dv));
+      spawnCoord = { face: "top", u: safeU, v: safeV };
+    } else {
+      // Solo mode: random face and coordinates
+      const faces: FaceDirection[] = ["top", "front", "right", "back", "left", "bottom"];
+      const randomFace = faces[Math.floor(Math.random() * faces.length)];
+      const randomU = Math.floor(Math.random() * N);
+      const randomV = Math.floor(Math.random() * N);
+      spawnCoord = { face: randomFace, u: randomU, v: randomV };
+    }
 
     const playerHex = parseInt((partyClient.playerColor || "#0284c7").replace("#", "0x"), 16) || 0x0284c7;
     const miner = new MinerAvatar(
@@ -639,7 +667,7 @@ export const MinesweeperGame: React.FC = () => {
     };
     minerAvatarRef.current = miner;
     scene.add(miner.group);
-    setMinerFace(randomFace);
+    setMinerFace(spawnCoord.face);
 
     // Orient camera immediately in fixed third-person view directly behind the miner
     const normal = miner.currentNormal;
@@ -651,10 +679,14 @@ export const MinesweeperGame: React.FC = () => {
     controlsTargetRef.current.copy(miner.group.position).addScaledVector(normal, 0.6);
     camera.lookAt(controlsTargetRef.current);
 
-    // Auto-reveal starting cell to open the safe opening cluster immediately
-    const startCell = board.cellMap.get(`${randomFace}_${randomU}_${randomV}`);
-    if (startCell) {
-      revealCell(startCell);
+    // Auto-reveal starting cell ONLY in Solo mode
+    // In Party mode: The Host triggers the expedition start, opening the guaranteed safe landing zone for all players
+    // Non-hosts NEVER auto-reveal an uncoordinated random tile
+    if (!isParty) {
+      const startCell = board.cellMap.get(`${spawnCoord.face}_${spawnCoord.u}_${spawnCoord.v}`);
+      if (startCell && !startCell.isRevealed) {
+        revealCell(startCell);
+      }
     }
   }, [mode, difficulty, revealCell]);
 
@@ -739,7 +771,7 @@ export const MinesweeperGame: React.FC = () => {
       // Multiplayer: update remote avatars and send local heartbeat
       if (partySession && sceneRef.current) {
         const scene = sceneRef.current;
-        const currentPlayers = partySession.players || {};
+        const currentPlayers = partyClient.session?.players || partySession.players || {};
         const activeIds = new Set<string>();
 
         Object.entries(currentPlayers).forEach(([pId, p]) => {
@@ -1387,12 +1419,54 @@ export const MinesweeperGame: React.FC = () => {
   const handleStartPartyGame = useCallback(() => {
     sound.playClick();
     const board = boardManagerRef.current;
-    const mineLocations = board?.cells.filter((c) => c.isMine).map((c) => c.id) || [];
+    if (!board) return;
+
+    // Designate shared landing zone at top face center
+    const N = currentConfig.gridSize;
+    const centerU = Math.floor(N / 2);
+    const centerV = Math.floor(N / 2);
+    const landingCell = board.cellMap.get(`top_${centerU}_${centerV}`);
+
+    // Pre-populate mines guaranteeing the entire landing cluster is 100% safe!
+    let mineLocations: string[] = [];
+    if (landingCell && !board.firstClickDone) {
+      mineLocations = board.populateMines(landingCell);
+    } else {
+      mineLocations = board.cells.filter((c) => c.isMine).map((c) => c.id);
+    }
+
+    // Auto-reveal the landing cell to open the safe landing clearing for all explorers
+    if (landingCell && !landingCell.isRevealed) {
+      revealCell(landingCell, true);
+    }
+
     partyClient.sendAction({
       type: "start",
       minesLocations: mineLocations.length > 0 ? mineLocations : undefined,
     });
     setShowLobbyModal(false);
+  }, [currentConfig.gridSize, revealCell]);
+
+  // Listen for incoming in-app party invites
+  useEffect(() => {
+    const unsub = friendsManager.subscribeToIncomingInvites((invite) => {
+      sound.playClick();
+      setIncomingInvite(invite);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleAcceptPartyInvite = useCallback((invite: { id: string; room_code: string }) => {
+    sound.playClick();
+    friendsManager.respondToPartyInvite(invite.id, "accepted");
+    setIncomingInvite(null);
+    handleJoinParty(invite.room_code);
+  }, [handleJoinParty]);
+
+  const handleDeclinePartyInvite = useCallback((invite: { id: string }) => {
+    sound.playClick();
+    friendsManager.respondToPartyInvite(invite.id, "declined");
+    setIncomingInvite(null);
   }, []);
 
   return (
@@ -1468,6 +1542,37 @@ export const MinesweeperGame: React.FC = () => {
           onStartGame={handleStartPartyGame}
           onLeaveParty={handleLeaveParty}
         />
+      )}
+
+      {/* Incoming Party Invite Holographic Notification */}
+      {incomingInvite && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto flex items-center gap-3 bg-slate-900/95 border border-purple-500/60 shadow-2xl shadow-purple-950/60 px-4 py-3 rounded-2xl animate-in slide-in-from-top duration-300">
+          <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/30">
+            <Users className="w-4 h-4" />
+          </div>
+          <div className="text-xs">
+            <div className="font-bold text-white">Party Invitation</div>
+            <div className="text-slate-400 text-[11px]">
+              <span className="text-purple-300 font-bold">{incomingInvite.from_username}</span> invited you to expedition <span className="font-mono text-cyan-400 font-bold">{incomingInvite.room_code}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 ml-2">
+            <button
+              onClick={() => handleAcceptPartyInvite(incomingInvite)}
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:brightness-110 text-white text-xs font-bold shadow-md transition-all flex items-center gap-1"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Join</span>
+            </button>
+            <button
+              onClick={() => handleDeclinePartyInvite(incomingInvite)}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+              title="Decline"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

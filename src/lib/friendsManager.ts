@@ -19,6 +19,15 @@ export interface FriendRequestEntry {
   created_at: string;
 }
 
+export interface PartyInviteEntry {
+  id: string;
+  from_username: string;
+  to_username: string;
+  room_code: string;
+  status: "pending" | "accepted" | "declined";
+  created_at: string;
+}
+
 class FriendsManager {
   // Fetch accepted friends
   public async getFriendsList(): Promise<FriendEntry[]> {
@@ -269,6 +278,128 @@ class FriendsManager {
   // Remove an existing friend
   public async removeFriend(friendshipId: string): Promise<{ error?: string }> {
     return this.declineFriendRequest(friendshipId);
+  }
+
+  // Send in-game party invitation to a friend
+  public async sendPartyInvite(toUsername: string, roomCode: string): Promise<{ error?: string }> {
+    const supabase = getSupabaseClient();
+    const profile = authManager.getProfile();
+    if (!supabase || !profile) return { error: "Please sign in to invite friends." };
+
+    try {
+      // 1. Insert into party_invites table
+      const { data, error } = await supabase
+        .from("party_invites")
+        .insert({
+          from_username: profile.username,
+          to_username: toUsername.trim(),
+          room_code: roomCode.trim().toUpperCase(),
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.warn("Could not insert invite to database, broadcasting via Realtime channel:", error.message);
+      }
+
+      // 2. Broadcast immediately over Realtime channel for instant notification
+      const chan = supabase.channel(`party_invites_${toUsername.trim().toLowerCase()}`);
+      chan.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          chan.send({
+            type: "broadcast",
+            event: "new_invite",
+            payload: {
+              id: data?.id || `inv_${Date.now()}`,
+              from_username: profile.username,
+              to_username: toUsername.trim(),
+              room_code: roomCode.trim().toUpperCase(),
+            },
+          });
+          setTimeout(() => {
+            try {
+              supabase.removeChannel(chan);
+            } catch {}
+          }, 3000);
+        }
+      });
+
+      return {};
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send party invite.";
+      return { error: msg };
+    }
+  }
+
+  // Get active pending party invites for current user
+  public async getPendingPartyInvites(): Promise<PartyInviteEntry[]> {
+    const supabase = getSupabaseClient();
+    const profile = authManager.getProfile();
+    if (!supabase || !profile) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from("party_invites")
+        .select("*")
+        .eq("to_username", profile.username)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (error || !data) return [];
+      return data as PartyInviteEntry[];
+    } catch {
+      return [];
+    }
+  }
+
+  // Respond to a party invite (accepted or declined)
+  public async respondToPartyInvite(
+    inviteId: string,
+    status: "accepted" | "declined"
+  ): Promise<{ error?: string }> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return { error: "Supabase not connected." };
+
+    try {
+      const { error } = await supabase
+        .from("party_invites")
+        .update({ status })
+        .eq("id", inviteId);
+
+      if (error) return { error: error.message };
+      return {};
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update invite.";
+      return { error: msg };
+    }
+  }
+
+  // Real-time listener for incoming party invites
+  public subscribeToIncomingInvites(
+    callback: (invite: { id: string; from_username: string; room_code: string }) => void
+  ): () => void {
+    const supabase = getSupabaseClient();
+    const profile = authManager.getProfile();
+    if (!supabase || !profile) return () => {};
+
+    const chanName = `party_invites_${profile.username.toLowerCase()}`;
+    const channel = supabase.channel(chanName);
+
+    channel.on("broadcast", { event: "new_invite" }, ({ payload }) => {
+      if (payload) {
+        callback(payload);
+      }
+    });
+
+    channel.subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
   }
 }
 

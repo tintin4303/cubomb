@@ -131,27 +131,19 @@ export const StartMenu: React.FC<StartMenuProps> = ({
 
   const handleJoinPartySubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!joinCodeInput.trim()) return;
+    const code = joinCodeInput.trim().toUpperCase();
+    if (!code) return;
 
     setIsJoining(true);
     setJoinError(null);
     sound.playClick();
 
     partyClient.setPlayerProfile(playerName, selectedColor);
-    const code = joinCodeInput.trim().toUpperCase();
 
     try {
-      const res = await fetch(`/api/party/${code}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.session) {
-          onJoinParty(code);
-          return;
-        }
-      }
-      setJoinError("Party room not found or session expired.");
+      await onJoinParty(code);
     } catch {
-      setJoinError("Failed to connect to party server.");
+      setJoinError("Failed to connect to party room.");
     } finally {
       setIsJoining(false);
     }
@@ -516,16 +508,21 @@ export const StartMenu: React.FC<StartMenuProps> = ({
             friendsManager.getPendingRequests().then((r) => setPendingRequestsCount(r.length));
           }
         }}
-        onInviteToParty={(friendUsername) => {
-          if (partyClient.session) {
+        onInviteToParty={async (friendUsername) => {
+          let code = partyClient.session?.code;
+          if (!code) {
+            const sess = await partyClient.createRoom({ mode, difficulty });
+            if (sess) {
+              code = sess.code;
+              onCreateParty(mode, difficulty);
+            }
+          }
+          if (code) {
+            await friendsManager.sendPartyInvite(friendUsername, code);
             if (typeof window !== "undefined") {
-              const url = `${window.location.origin}?room=${partyClient.session.code}`;
+              const url = `${window.location.origin}?room=${code}`;
               navigator.clipboard.writeText(url);
             }
-          } else {
-            setShowFriendsModal(false);
-            setActiveTab("party");
-            setPartyTab("create");
           }
         }}
       />
