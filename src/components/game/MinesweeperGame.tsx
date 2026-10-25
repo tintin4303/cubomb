@@ -1496,6 +1496,10 @@ export const MinesweeperGame: React.FC = () => {
         difficulty={difficulty}
         currentMinerFace={minerFace}
         isMuted={isMuted}
+        interactMode={interactMode}
+        onToggleInteractMode={() => handleSetInteractMode(interactMode === "flag" ? "reveal" : "flag")}
+        onStartMove={handleStartMove}
+        onStopMove={handleStopMove}
         onResetCamera={handleResetCamera}
         onCameraPreset={handleCameraPreset}
         onRestart={() => {
