@@ -692,6 +692,10 @@ export const MinesweeperGame: React.FC = () => {
 
   // Initial load
   useEffect(() => {
+    // Preload real 3D assets into GPU cache
+    BoardManager.preloadModel();
+    MinerAvatar.preloadAstronaut();
+
     initGame();
 
     const handleResize = () => {
@@ -1510,9 +1514,6 @@ export const MinesweeperGame: React.FC = () => {
           const m = sound.toggleMute();
           setIsMuted(m);
         }}
-        onMinerAction={handleMinerAction}
-        onStartMove={handleStartMove}
-        onStopMove={handleStopMove}
         onOpenMenu={() => setShowStartMenu(true)}
         partySession={partySession}
         currentPlayerId={partyClient.playerId}

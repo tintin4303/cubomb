@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { CellData, FaceDirection, GameMode } from "./types";
 
 export class BoardManager {
@@ -11,6 +12,10 @@ export class BoardManager {
   public cells: CellData[] = [];
   public cellMap: Map<string, CellData> = new Map();
   public firstClickDone: boolean = false;
+
+  // Cached 3D model template
+  private static cachedMineTemplate: THREE.Group | null = null;
+  private static isModelLoading: boolean = false;
 
   // Reusable materials
   public matHidden!: THREE.MeshStandardMaterial;
@@ -321,15 +326,66 @@ export class BoardManager {
   private geoMineCore = new THREE.SphereGeometry(0.36, 12, 12);
   private geoMineSpike = new THREE.ConeGeometry(0.06, 0.3, 6);
 
-  // Create Mine Model (3D futuristic naval mine - zero point lights for maximum performance)
+  // Preload real 3D mine model from public assets
+  public static preloadModel() {
+    if (typeof window === "undefined" || BoardManager.cachedMineTemplate || BoardManager.isModelLoading) return;
+    BoardManager.isModelLoading = true;
+    const loader = new GLTFLoader();
+    loader.load(
+      "/models/mine.glb",
+      (gltf) => {
+        const root = gltf.scene;
+        // Center model geometry
+        const box = new THREE.Box3().setFromObject(root);
+        const center = box.getCenter(new THREE.Vector3());
+        root.position.sub(center);
+
+        // Scale to fit tile
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const targetScale = 0.75 / maxDim;
+        root.scale.setScalar(targetScale);
+
+        // Apply dark metallic space-mine material
+        root.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const m = child as THREE.Mesh;
+            m.castShadow = true;
+            m.receiveShadow = true;
+            if (m.material) {
+              const orig = m.material as THREE.MeshStandardMaterial;
+              orig.metalness = 0.8;
+              orig.roughness = 0.3;
+            }
+          }
+        });
+
+        BoardManager.cachedMineTemplate = root;
+      },
+      undefined,
+      (err) => {
+        console.warn("Could not load /models/mine.glb, using procedural fallback", err);
+      }
+    );
+  }
+
+  // Create Mine Model (Uses real 3D Kenney space-mine model with procedural fallback)
   public createMineModel(): THREE.Group {
     const group = new THREE.Group();
 
-    // Core sphere (reused geometry & glowing emissive material)
+    if (BoardManager.cachedMineTemplate) {
+      const clone = BoardManager.cachedMineTemplate.clone(true);
+      group.add(clone);
+      return group;
+    }
+
+    // Try loading template for future mine reveals
+    BoardManager.preloadModel();
+
+    // Procedural sci-fi naval mine fallback
     const core = new THREE.Mesh(this.geoMineCore, this.matMineCore);
     group.add(core);
 
-    // Spikes protruding in 6 axes + 4 diagonals (reused geometry)
     const spikeDirs = [
       new THREE.Vector3(1, 0, 0),
       new THREE.Vector3(-1, 0, 0),

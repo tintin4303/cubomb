@@ -47,25 +47,25 @@ export const DIFFICULTY_PRESETS: Record<Difficulty, DifficultyConfig> = {
     name: "Novice",
     gridSize: 5,
     mines: 20,
-    description: "5×5 faces (150 tiles, 20 mines). Great for quick expeditions!",
+    description: "5×5 Grid • 20 Mines. Fast orbital recon.",
   },
   medium: {
     name: "Explorer",
     gridSize: 7,
     mines: 45,
-    description: "7×7 faces (294 tiles, 45 mines). Deep quarry exploration.",
+    description: "7×7 Grid • 45 Mines. Standard planetary mission.",
   },
   hard: {
-    name: "Colossus (100 Mines)",
+    name: "Colossus",
     gridSize: 9,
     mines: 99,
-    description: "9×9 faces (486 tiles, 99 mines). The true 100-mine 3D challenge!",
+    description: "9×9 Grid • 99 Mines. Deep core challenge.",
   },
   custom: {
     name: "Surveyor",
     gridSize: 8,
     mines: 70,
-    description: "8×8 faces (384 tiles, 70 mines).",
+    description: "8×8 Grid • 70 Mines. Custom planetary field.",
   },
 };
 

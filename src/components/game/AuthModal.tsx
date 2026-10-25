@@ -72,34 +72,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 pointer-events-auto select-none">
-      <div className="glass-panel-glow max-w-sm w-full rounded-2xl p-6 text-slate-100 shadow-2xl border border-cyan-500/30 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 pointer-events-auto select-none">
+      <div className="glass-panel max-w-sm w-full rounded-2xl p-6 text-slate-100 shadow-2xl border border-white/10 animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md">
-              <User className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-base font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-blue-200">
-                EXPLORER ACCOUNT
-              </h3>
-              <p className="text-[11px] text-slate-400">Save best times and join expeditions</p>
-            </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400" />
+            <span className="text-sm font-mono font-bold tracking-wider text-white">
+              PILOT ACCOUNT
+            </span>
           </div>
           <button
             onClick={() => {
               sound.playClick();
               onClose();
             }}
-            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Toggle */}
-        <div className="flex rounded-xl bg-slate-950/80 p-1 border border-slate-800 mb-4">
+        <div className="flex rounded-xl bg-slate-950/80 p-1 border border-white/5 mb-4">
           <button
             type="button"
             onClick={() => {
@@ -107,9 +102,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
               setTab("signin");
               setErrorMsg(null);
             }}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               tab === "signin"
-                ? "bg-cyan-600 text-white shadow-md font-black"
+                ? "bg-slate-800 text-white font-bold"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -123,9 +118,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
               setTab("signup");
               setErrorMsg(null);
             }}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               tab === "signup"
-                ? "bg-cyan-600 text-white shadow-md font-black"
+                ? "bg-slate-800 text-white font-bold"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >

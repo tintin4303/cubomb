@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { sound } from "./sound";
 
 export type CharacterAction = "idle" | "walk" | "dig" | "celebrate" | "dead";
@@ -13,7 +14,21 @@ export class MinerAvatar {
   public group: THREE.Group;
   public action: CharacterAction = "idle";
 
-  // Character sub-meshes for animation
+  // Real 3D GLTF Astronaut Model Support
+  private gltfRoot: THREE.Group | null = null;
+  private gltfArmLeft: THREE.Object3D | null = null;
+  private gltfArmRight: THREE.Object3D | null = null;
+  private gltfLegLeft: THREE.Object3D | null = null;
+  private gltfLegRight: THREE.Object3D | null = null;
+  private gltfHead: THREE.Object3D | null = null;
+  private isGltfLoaded: boolean = false;
+
+  private static cachedAstronautGltf: THREE.Group | null = null;
+  private static isAstronautLoading: boolean = false;
+  private static pendingCallbacks: (() => void)[] = [];
+
+  // Character sub-meshes for animation (procedural fallback)
+  private proceduralContainer!: THREE.Group;
   private bodyMesh!: THREE.Mesh;
   private headGroup!: THREE.Group;
   private visorMesh!: THREE.Mesh;
@@ -76,8 +91,103 @@ export class MinerAvatar {
     this.teleportToCoord(this.currentCoord);
   }
 
+  public static preloadAstronaut(onLoaded?: () => void) {
+    if (typeof window === "undefined") return;
+    if (MinerAvatar.cachedAstronautGltf) {
+      onLoaded?.();
+      return;
+    }
+    if (onLoaded) {
+      MinerAvatar.pendingCallbacks.push(onLoaded);
+    }
+    if (MinerAvatar.isAstronautLoading) return;
+    MinerAvatar.isAstronautLoading = true;
+
+    const loader = new GLTFLoader();
+    loader.load(
+      "/models/astronaut.glb",
+      (gltf) => {
+        const root = gltf.scene;
+        const astronautNode = root.getObjectByName("astronautA");
+        if (astronautNode) {
+          astronautNode.position.set(0, 0, 0);
+        }
+
+        root.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const m = child as THREE.Mesh;
+            m.castShadow = true;
+            m.receiveShadow = true;
+            if (m.material) {
+              const orig = m.material as THREE.MeshStandardMaterial;
+              orig.roughness = 0.35;
+              orig.metalness = 0.25;
+            }
+          }
+        });
+
+        MinerAvatar.cachedAstronautGltf = root;
+        MinerAvatar.isAstronautLoading = false;
+        MinerAvatar.pendingCallbacks.forEach((cb) => cb());
+        MinerAvatar.pendingCallbacks = [];
+      },
+      undefined,
+      (err) => {
+        console.warn("Could not load /models/astronaut.glb, using procedural fallback", err);
+        MinerAvatar.isAstronautLoading = false;
+      }
+    );
+  }
+
+  private tryAttachGltf() {
+    if (MinerAvatar.cachedAstronautGltf) {
+      this.attachGltfInstance(MinerAvatar.cachedAstronautGltf);
+    } else {
+      MinerAvatar.preloadAstronaut(() => {
+        if (!this.isGltfLoaded && MinerAvatar.cachedAstronautGltf) {
+          this.attachGltfInstance(MinerAvatar.cachedAstronautGltf);
+        }
+      });
+    }
+  }
+
+  private attachGltfInstance(template: THREE.Group) {
+    if (this.isGltfLoaded) return;
+    const gltfClone = template.clone(true);
+
+    this.gltfRoot = gltfClone;
+    this.gltfArmLeft = gltfClone.getObjectByName("armLeft") || null;
+    this.gltfArmRight = gltfClone.getObjectByName("armRight") || null;
+    this.gltfLegLeft = gltfClone.getObjectByName("legLeft") || null;
+    this.gltfLegRight = gltfClone.getObjectByName("legRight") || null;
+    this.gltfHead = gltfClone.getObjectByName("head") || null;
+
+    // Scale to match chibi avatar size (~0.55 relative to cube)
+    this.gltfRoot.scale.setScalar(0.72);
+    // Face forward (+Z direction)
+    this.gltfRoot.rotation.y = Math.PI;
+    this.gltfRoot.position.set(0, 0, 0);
+
+    // Attach pickaxe to right arm if available
+    if (this.gltfArmRight && this.pickaxeGroup) {
+      const pickaxeClone = this.pickaxeGroup.clone(true);
+      pickaxeClone.position.set(0, -0.32, 0.08);
+      pickaxeClone.rotation.set(Math.PI / 4, 0, 0);
+      this.gltfArmRight.add(pickaxeClone);
+    }
+
+    this.group.add(this.gltfRoot);
+    if (this.proceduralContainer) {
+      this.proceduralContainer.visible = false;
+    }
+    this.isGltfLoaded = true;
+  }
+
   private createModel() {
     const scale = 0.55; // Cute chibi scale relative to cube size
+
+    this.proceduralContainer = new THREE.Group();
+    this.group.add(this.proceduralContainer);
 
     // Materials
     const matSuit = new THREE.MeshStandardMaterial({
@@ -113,7 +223,7 @@ export class MinerAvatar {
     const bodyGeo = new THREE.CylinderGeometry(0.24 * scale, 0.2 * scale, 0.38 * scale, 8);
     this.bodyMesh = new THREE.Mesh(bodyGeo, matSuit);
     this.bodyMesh.position.y = 0.32 * scale;
-    this.group.add(this.bodyMesh);
+    this.proceduralContainer.add(this.bodyMesh);
 
     // Torso chest plate
     const chestGeo = new THREE.BoxGeometry(0.22 * scale, 0.2 * scale, 0.12 * scale);
@@ -142,7 +252,7 @@ export class MinerAvatar {
     // Subtle beacon point light
     this.antennaLight = new THREE.PointLight(0x38bdf8, 0.8, 2.5);
     this.antennaLight.position.set(0, 0.4 * scale, 0.2 * scale);
-    this.group.add(this.antennaLight);
+    this.proceduralContainer.add(this.antennaLight);
 
     // 2. Head & Visor
     this.headGroup = new THREE.Group();
@@ -171,7 +281,7 @@ export class MinerAvatar {
     rightEar.position.x = 0.28 * scale;
     this.headGroup.add(rightEar);
 
-    this.group.add(this.headGroup);
+    this.proceduralContainer.add(this.headGroup);
 
     // 3. Arms
     const armGeo = new THREE.CylinderGeometry(0.065 * scale, 0.06 * scale, 0.28 * scale, 6);
@@ -181,13 +291,13 @@ export class MinerAvatar {
     this.leftArmGroup.position.set(-0.25 * scale, 0.46 * scale, 0);
     const leftArmMesh = new THREE.Mesh(armGeo, matSuit);
     this.leftArmGroup.add(leftArmMesh);
-    this.group.add(this.leftArmGroup);
+    this.proceduralContainer.add(this.leftArmGroup);
 
     this.rightArmGroup = new THREE.Group();
     this.rightArmGroup.position.set(0.25 * scale, 0.46 * scale, 0);
     const rightArmMesh = new THREE.Mesh(armGeo, matSuit);
     this.rightArmGroup.add(rightArmMesh);
-    this.group.add(this.rightArmGroup);
+    this.proceduralContainer.add(this.rightArmGroup);
 
     // Pickaxe in right hand
     this.pickaxeGroup = new THREE.Group();
@@ -218,7 +328,7 @@ export class MinerAvatar {
     const leftBootMesh = new THREE.Mesh(bootGeo, matDark);
     this.leftLegGroup.add(leftLegMesh);
     this.leftLegGroup.add(leftBootMesh);
-    this.group.add(this.leftLegGroup);
+    this.proceduralContainer.add(this.leftLegGroup);
 
     this.rightLegGroup = new THREE.Group();
     this.rightLegGroup.position.set(0.11 * scale, 0.16 * scale, 0);
@@ -226,7 +336,10 @@ export class MinerAvatar {
     const rightBootMesh = new THREE.Mesh(bootGeo, matDark);
     this.rightLegGroup.add(rightLegMesh);
     this.rightLegGroup.add(rightBootMesh);
-    this.group.add(this.rightLegGroup);
+    this.proceduralContainer.add(this.rightLegGroup);
+
+    // Connect real GLTF model if loaded or initiate load
+    this.tryAttachGltf();
   }
 
   // Convert surface coordinate (face, u, v) to 3D world position
@@ -622,6 +735,11 @@ export class MinerAvatar {
   // Reset to idle
   public reset(coord?: SurfaceCoord) {
     this.action = "idle";
+    this.group.rotation.set(0, 0, 0);
+    if (this.gltfRoot) {
+      this.gltfRoot.position.set(0, 0, 0);
+      this.gltfRoot.rotation.set(0, Math.PI, 0);
+    }
     const center = Math.floor(this.gridSize / 2);
     this.teleportToCoord(coord || { face: "top", u: center, v: center });
   }
@@ -637,17 +755,26 @@ export class MinerAvatar {
       const walkFreq = 7.0;
       const swing = Math.sin(this.animTimer * walkFreq);
 
-      // Swing legs
+      // Swing procedural legs
       this.leftLegGroup.rotation.x = swing * 0.65;
       this.rightLegGroup.rotation.x = -swing * 0.65;
 
-      // Swing arms
+      // Swing procedural arms
       this.leftArmGroup.rotation.x = -swing * 0.55;
       this.rightArmGroup.rotation.x = swing * 0.55;
 
       // Stable body posture
       this.bodyMesh.position.y = 0.32 * 0.55;
       this.headGroup.rotation.y = swing * 0.08;
+
+      // Swing GLTF limbs
+      if (this.isGltfLoaded) {
+        if (this.gltfLegLeft) this.gltfLegLeft.rotation.x = swing * 0.65;
+        if (this.gltfLegRight) this.gltfLegRight.rotation.x = -swing * 0.65;
+        if (this.gltfArmLeft) this.gltfArmLeft.rotation.x = -swing * 0.55;
+        if (this.gltfArmRight) this.gltfArmRight.rotation.x = swing * 0.55;
+        if (this.gltfHead) this.gltfHead.rotation.y = swing * 0.08;
+      }
     } else if (this.action === "dig") {
       this.digTimer = Math.max(0, this.digTimer - delta);
       const digProgress = 1 - this.digTimer / 0.35;
@@ -658,6 +785,11 @@ export class MinerAvatar {
       this.pickaxeGroup.rotation.x = Math.PI / 4 + strike * 0.8;
       this.bodyMesh.rotation.x = strike * 0.3;
       this.headGroup.rotation.x = strike * 0.4;
+
+      if (this.isGltfLoaded) {
+        if (this.gltfArmRight) this.gltfArmRight.rotation.x = -1.2 + strike * 2.2;
+        if (this.gltfHead) this.gltfHead.rotation.x = strike * 0.4;
+      }
     } else if (this.action === "celebrate") {
       // Victory dance
       const hop = Math.abs(Math.sin(this.animTimer * 8));
@@ -669,12 +801,25 @@ export class MinerAvatar {
       this.leftArmGroup.rotation.x = 0;
       this.rightArmGroup.rotation.x = 0;
       this.headGroup.rotation.x = -0.3;
+
+      if (this.isGltfLoaded) {
+        if (this.gltfRoot) this.gltfRoot.position.y = hop * 0.12;
+        if (this.gltfArmLeft) this.gltfArmLeft.rotation.z = 2.0;
+        if (this.gltfArmRight) this.gltfArmRight.rotation.z = -2.0;
+        if (this.gltfHead) this.gltfHead.rotation.x = -0.3;
+      }
     } else if (this.action === "dead") {
       // Defeated / Dizzy
       this.group.rotation.z = Math.PI / 2.2;
       this.leftArmGroup.rotation.x = 1.0;
       this.rightArmGroup.rotation.x = 1.0;
       this.headGroup.rotation.y = Math.sin(this.animTimer * 4) * 0.4;
+
+      if (this.isGltfLoaded) {
+        if (this.gltfArmLeft) this.gltfArmLeft.rotation.x = 1.0;
+        if (this.gltfArmRight) this.gltfArmRight.rotation.x = 1.0;
+        if (this.gltfHead) this.gltfHead.rotation.y = Math.sin(this.animTimer * 4) * 0.4;
+      }
     } else {
       // Idle breathing
       const breath = Math.sin(this.animTimer * 2.5);
@@ -690,6 +835,24 @@ export class MinerAvatar {
       this.rightArmGroup.rotation.x = THREE.MathUtils.lerp(this.rightArmGroup.rotation.x, 0.2, Math.min(1, delta * 10));
       this.rightArmGroup.rotation.z = THREE.MathUtils.lerp(this.rightArmGroup.rotation.z, 0, Math.min(1, delta * 10));
       this.bodyMesh.rotation.x = THREE.MathUtils.lerp(this.bodyMesh.rotation.x, 0, Math.min(1, delta * 10));
+
+      if (this.isGltfLoaded) {
+        if (this.gltfRoot) this.gltfRoot.position.y = THREE.MathUtils.lerp(this.gltfRoot.position.y, 0, Math.min(1, delta * 10));
+        if (this.gltfLegLeft) this.gltfLegLeft.rotation.x = THREE.MathUtils.lerp(this.gltfLegLeft.rotation.x, 0, Math.min(1, delta * 10));
+        if (this.gltfLegRight) this.gltfLegRight.rotation.x = THREE.MathUtils.lerp(this.gltfLegRight.rotation.x, 0, Math.min(1, delta * 10));
+        if (this.gltfArmLeft) {
+          this.gltfArmLeft.rotation.x = THREE.MathUtils.lerp(this.gltfArmLeft.rotation.x, 0, Math.min(1, delta * 10));
+          this.gltfArmLeft.rotation.z = THREE.MathUtils.lerp(this.gltfArmLeft.rotation.z, 0, Math.min(1, delta * 10));
+        }
+        if (this.gltfArmRight) {
+          this.gltfArmRight.rotation.x = THREE.MathUtils.lerp(this.gltfArmRight.rotation.x, 0, Math.min(1, delta * 10));
+          this.gltfArmRight.rotation.z = THREE.MathUtils.lerp(this.gltfArmRight.rotation.z, 0, Math.min(1, delta * 10));
+        }
+        if (this.gltfHead) {
+          this.gltfHead.rotation.x = THREE.MathUtils.lerp(this.gltfHead.rotation.x, 0, Math.min(1, delta * 10));
+          this.gltfHead.rotation.y = THREE.MathUtils.lerp(this.gltfHead.rotation.y, Math.sin(this.animTimer * 0.8) * 0.15, Math.min(1, delta * 10));
+        }
+      }
     }
   }
 
