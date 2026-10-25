@@ -271,33 +271,36 @@ export class BoardManager {
     return null;
   }
 
-  // Create Flag Model (3D futuristic hologram beacon)
+  // Create Flag Model (3D futuristic hologram beacon seated flush on tile)
   public createFlagModel(): THREE.Group {
     const group = new THREE.Group();
     const scale = 0.5;
 
-    // Glowing base ring
-    const baseGeo = new THREE.CylinderGeometry(0.24 * scale, 0.3 * scale, 0.08 * scale, 12);
+    // Base collar ring - seated at y = 0
+    const baseH = 0.06 * scale;
+    const baseGeo = new THREE.CylinderGeometry(0.2 * scale, 0.26 * scale, baseH, 12);
     const baseMat = new THREE.MeshStandardMaterial({
       color: 0x334155,
       metalness: 0.8,
       roughness: 0.2,
     });
     const base = new THREE.Mesh(baseGeo, baseMat);
+    base.position.y = baseH / 2;
     group.add(base);
 
-    // Pole
-    const poleGeo = new THREE.CylinderGeometry(0.03 * scale, 0.03 * scale, 0.9 * scale, 8);
+    // Pole anchored directly into base
+    const poleH = 0.85 * scale;
+    const poleGeo = new THREE.CylinderGeometry(0.025 * scale, 0.025 * scale, poleH, 8);
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9 });
     const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.y = 0.45 * scale;
+    pole.position.y = poleH / 2;
     group.add(pole);
 
     // Holographic flag banner (Triangle)
     const bannerShape = new THREE.Shape();
     bannerShape.moveTo(0, 0);
-    bannerShape.lineTo(0.45 * scale, 0.18 * scale);
-    bannerShape.lineTo(0, 0.36 * scale);
+    bannerShape.lineTo(0.42 * scale, 0.16 * scale);
+    bannerShape.lineTo(0, 0.32 * scale);
     bannerShape.closePath();
 
     const bannerGeo = new THREE.ShapeGeometry(bannerShape);
@@ -310,14 +313,14 @@ export class BoardManager {
       opacity: 0.95,
     });
     const banner = new THREE.Mesh(bannerGeo, bannerMat);
-    banner.position.set(0.02 * scale, 0.5 * scale, 0);
+    banner.position.set(0.02 * scale, 0.48 * scale, 0);
     group.add(banner);
 
     // Tip beacon sphere
-    const tipGeo = new THREE.SphereGeometry(0.06 * scale, 8, 8);
+    const tipGeo = new THREE.SphereGeometry(0.05 * scale, 8, 8);
     const tipMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
     const tip = new THREE.Mesh(tipGeo, tipMat);
-    tip.position.y = 0.9 * scale;
+    tip.position.y = poleH;
     group.add(tip);
 
     return group;

@@ -186,10 +186,14 @@ export const StartMenu: React.FC<StartMenuProps> = ({
                 sound.playClick();
                 onToggleMute();
               }}
-              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/5 transition-colors"
+              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/5 transition-colors group"
               title={isMuted ? "Unmute" : "Mute"}
             >
-              {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
+              <img
+                src={isMuted ? "/ui/icon_audioOff.png" : "/ui/icon_audioOn.png"}
+                alt="Audio"
+                className="w-4 h-4 invert opacity-75 group-hover:opacity-100"
+              />
             </button>
 
             {/* Help / Guide */}
@@ -198,10 +202,14 @@ export const StartMenu: React.FC<StartMenuProps> = ({
                 sound.playClick();
                 onOpenHelp();
               }}
-              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/5 transition-colors"
-              title="How to Play"
+              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/5 transition-colors group"
+              title="Tactical Guide"
             >
-              <HelpCircle className="w-4 h-4" />
+              <img
+                src="/ui/icon_information.png"
+                alt="Help"
+                className="w-4 h-4 invert opacity-75 group-hover:opacity-100"
+              />
             </button>
           </div>
         </div>
@@ -285,7 +293,7 @@ export const StartMenu: React.FC<StartMenuProps> = ({
               }}
               className="w-full py-3.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-950/50 active:scale-98"
             >
-              <Play className="w-4 h-4 fill-current" />
+              <img src="/ui/crossair_blue.png" alt="" className="w-4 h-4" />
               <span>Launch Mission</span>
             </button>
           </div>

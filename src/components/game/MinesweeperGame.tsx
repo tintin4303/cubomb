@@ -351,7 +351,8 @@ export const MinesweeperGame: React.FC = () => {
         if (cell.face && minerAvatarRef.current) {
           const norm = minerAvatarRef.current.getFaceNormal(cell.face);
           flag.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), norm);
-          flag.position.addScaledVector(norm, 0.45);
+          // Seat flag base directly on the outer surface of the tile
+          flag.position.addScaledVector(norm, 0.11);
         }
 
         scene.add(flag);
