@@ -6,11 +6,12 @@ export class BoardManager {
   public gridSize: number;
   public totalMines: number;
   public mode: GameMode;
-  public spacing: number = 1.1;
+  public spacing: number = 1.05;
   public cubeSize: number = 1.0;
 
   public cells: CellData[] = [];
   public cellMap: Map<string, CellData> = new Map();
+  public neighborMap: Map<string, CellData[]> = new Map();
   public firstClickDone: boolean = false;
 
   // Cached 3D model template
@@ -97,8 +98,10 @@ export class BoardManager {
   public initBoard(): CellData[] {
     this.cells = [];
     this.cellMap.clear();
+    this.neighborMap.clear();
     this.firstClickDone = false;
     this.initSurfaceCells();
+    this.buildNeighborMap();
     return this.cells;
   }
 
@@ -181,134 +184,97 @@ export class BoardManager {
     });
   }
 
-  // Get neighbors of a cell
-  public getNeighbors(cell: CellData): CellData[] {
-    return this.getSurfaceNeighbors(cell);
-  }
-
-  // Surface mode 8-neighbor wrapping around cube faces
-  private getSurfaceNeighbors(cell: CellData): CellData[] {
-    const neighbors: CellData[] = [];
-    const offsets = [-1, 0, 1];
+  // Build exact 3D Euclidean neighbor map across all 6 cube faces, edges, and corners
+  private buildNeighborMap() {
+    this.neighborMap.clear();
     const N = this.gridSize;
+    const spacing = this.spacing;
+    const half = (N - 1) / 2;
+    const faceDist = (half + 0.5) * spacing;
+    const thresholdSq = Math.pow(1.42 * spacing, 2);
 
-    for (const du of offsets) {
-      for (const dv of offsets) {
-        if (du === 0 && dv === 0) continue;
+    const posList: { cell: CellData; x: number; y: number; z: number }[] = [];
+    for (const cell of this.cells) {
+      const uPos = (cell.x - half) * spacing;
+      const vPos = (cell.y - half) * spacing;
+      let x = 0;
+      let y = 0;
+      let z = 0;
 
-        let nu = cell.x + du;
-        let nv = cell.y + dv;
-        let nFace = cell.face!;
+      switch (cell.face) {
+        case "top":
+          x = uPos;
+          y = faceDist;
+          z = -vPos;
+          break;
+        case "bottom":
+          x = uPos;
+          y = -faceDist;
+          z = vPos;
+          break;
+        case "front":
+          x = uPos;
+          y = vPos;
+          z = faceDist;
+          break;
+        case "back":
+          x = -uPos;
+          y = -vPos;
+          z = -faceDist;
+          break;
+        case "left":
+          x = -faceDist;
+          y = vPos;
+          z = uPos;
+          break;
+        case "right":
+          x = faceDist;
+          y = vPos;
+          z = -uPos;
+          break;
+        default:
+          x = uPos;
+          y = vPos;
+          z = 0;
+          break;
+      }
+      posList.push({ cell, x, y, z });
+    }
 
-        if (nu >= 0 && nu < N && nv >= 0 && nv < N) {
-          const n = this.cellMap.get(`${nFace}_${nu}_${nv}`);
-          if (n) neighbors.push(n);
-          continue;
-        }
+    const oppositeFaces: Record<string, string> = {
+      top: "bottom",
+      bottom: "top",
+      front: "back",
+      back: "front",
+      left: "right",
+      right: "left",
+    };
 
-        // Cross-face edge wrapping
-        const resolved = this.resolveFaceEdge(cell.face!, nu, nv, N);
-        if (resolved) {
-          const n = this.cellMap.get(`${resolved.face}_${resolved.u}_${resolved.v}`);
-          if (n && !neighbors.some((x) => x.id === n.id)) {
-            neighbors.push(n);
-          }
+    for (let i = 0; i < posList.length; i++) {
+      const p1 = posList[i];
+      const neighbors: CellData[] = [];
+      const f1 = p1.cell.face;
+      const opp = f1 ? oppositeFaces[f1] : undefined;
+
+      for (let j = 0; j < posList.length; j++) {
+        if (i === j) continue;
+        const p2 = posList[j];
+        if (opp && p2.cell.face === opp) continue;
+
+        const dx = p1.x - p2.x;
+        const dy = p1.y - p2.y;
+        const dz = p1.z - p2.z;
+        if (dx * dx + dy * dy + dz * dz <= thresholdSq) {
+          neighbors.push(p2.cell);
         }
       }
+      this.neighborMap.set(p1.cell.id, neighbors);
     }
-    return neighbors;
   }
 
-  private resolveFaceEdge(
-    face: FaceDirection,
-    u: number,
-    v: number,
-    N: number
-  ): { face: FaceDirection; u: number; v: number } | null {
-    // Clamp a coordinate to [0, N-1]
-    const clamp = (x: number) => Math.max(0, Math.min(N - 1, x));
-
-    // Tile positioning reference (from mesh placement code):
-    //   top    (+Y):  pos = ( uPos,  +faceDist, -vPos)  → u=X, v=-Z
-    //   bottom (-Y):  pos = ( uPos,  -faceDist, +vPos)  → u=X, v=+Z
-    //   front  (+Z):  pos = ( uPos,  +vPos,  +faceDist) → u=X, v=+Y
-    //   back   (-Z):  pos = (-uPos,  -vPos,  -faceDist) → u=-X, v=-Y
-    //   left   (-X):  pos = (-faceDist, +vPos, +uPos)   → u=+Z, v=+Y
-    //   right  (+X):  pos = (+faceDist, +vPos, -uPos)   → u=-Z, v=+Y
-
-    // top face edges
-    if (face === "top") {
-      // v < 0  -> north (+Z direction) -> front face top edge (v = N-1)
-      if (v < 0)   return { face: "front",  u: clamp(u),         v: N - 1 };
-      // v >= N -> south (-Z direction) -> back face top edge (v = N-1, u flipped)
-      if (v >= N)  return { face: "back",   u: clamp(N - 1 - u), v: N - 1 };
-      // u >= N -> east (+X direction)  -> right face top edge (v = N-1, u = N-1-v_old)
-      if (u >= N)  return { face: "right",  u: clamp(N - 1 - v), v: N - 1 };
-      // u < 0  -> west (-X direction)  -> left face top edge (v = N-1, u = v_old)
-      if (u < 0)   return { face: "left",   u: clamp(v),         v: N - 1 };
-    }
-
-    // bottom face edges
-    if (face === "bottom") {
-      // v >= N -> south (+Z direction) -> front face bottom edge (v = 0)
-      if (v >= N)  return { face: "front",  u: clamp(u),         v: 0 };
-      // v < 0  -> north (-Z direction) -> back face bottom edge (v = 0, u flipped)
-      if (v < 0)   return { face: "back",   u: clamp(N - 1 - u), v: 0 };
-      // u >= N -> east (+X direction)  -> right face bottom edge (v = 0, u = v_old)
-      if (u >= N)  return { face: "right",  u: clamp(v),         v: 0 };
-      // u < 0  -> west (-X direction)  -> left face bottom edge (v = 0, u = N-1-v_old)
-      if (u < 0)   return { face: "left",   u: clamp(N - 1 - v), v: 0 };
-    }
-
-    // front face edges (+Z face; u=X, v=+Y)
-    if (face === "front") {
-      // v >= N -> top edge -> top face south edge (v = N-1, u same)
-      if (v >= N)  return { face: "top",    u: clamp(u),         v: N - 1 };
-      // v < 0  -> bottom edge -> bottom face north edge (v = N-1, u same)
-      if (v < 0)   return { face: "bottom", u: clamp(u),         v: N - 1 };
-      // u >= N -> right edge -> right face left edge (u = 0, v same)
-      if (u >= N)  return { face: "right",  u: 0,                v: clamp(v) };
-      // u < 0  -> left edge  -> left face right edge (u = N-1, v same)
-      if (u < 0)   return { face: "left",   u: N - 1,            v: clamp(v) };
-    }
-
-    // back face edges (-Z face; u=-X, v=-Y)
-    if (face === "back") {
-      // v >= N -> (from back's coords) -> bottom face north edge (v = 0, u flipped)
-      if (v >= N)  return { face: "bottom", u: clamp(N - 1 - u), v: 0 };
-      // v < 0  -> top face south edge (v = N-1, u flipped)
-      if (v < 0)   return { face: "top",    u: clamp(N - 1 - u), v: N - 1 };
-      // u >= N -> left face right edge (u = N-1, v flipped due to back's -X direction)
-      if (u >= N)  return { face: "left",   u: N - 1,            v: clamp(N - 1 - v) };
-      // u < 0  -> right face left edge (u = 0, v flipped)
-      if (u < 0)   return { face: "right",  u: 0,                v: clamp(N - 1 - v) };
-    }
-
-    // right face edges (+X face; u=-Z, v=+Y)
-    if (face === "right") {
-      // v >= N -> top edge -> top face east edge (u = N-1, v = N-1-u_old)
-      if (v >= N)  return { face: "top",    u: N - 1,            v: clamp(N - 1 - u) };
-      // v < 0  -> bottom edge -> bottom face east edge (u = N-1, v = u_old)
-      if (v < 0)   return { face: "bottom", u: N - 1,            v: clamp(u) };
-      // u >= N -> back face left edge (u = 0, v flipped)
-      if (u >= N)  return { face: "back",   u: 0,                v: clamp(N - 1 - v) };
-      // u < 0  -> front face right edge (u = N-1, v same)
-      if (u < 0)   return { face: "front",  u: N - 1,            v: clamp(v) };
-    }
-
-    // left face edges (-X face; u=+Z, v=+Y)
-    if (face === "left") {
-      // v >= N -> top edge -> top face west edge (u = 0, v = u_old)
-      if (v >= N)  return { face: "top",    u: 0,                v: clamp(u) };
-      // v < 0  -> bottom edge -> bottom face west edge (u = 0, v = N-1-u_old)
-      if (v < 0)   return { face: "bottom", u: 0,                v: clamp(N - 1 - u) };
-      // u >= N -> front face left edge (u = 0, v same)
-      if (u >= N)  return { face: "front",  u: 0,                v: clamp(v) };
-      // u < 0  -> back face right edge (u = N-1, v flipped)
-      if (u < 0)   return { face: "back",   u: N - 1,            v: clamp(N - 1 - v) };
-    }
-
-    return null;
+  // Get neighbors of a cell (O(1) precomputed exact 3D surface neighbors)
+  public getNeighbors(cell: CellData): CellData[] {
+    return this.neighborMap.get(cell.id) || [];
   }
 
   // Create Beacon Model (3D futuristic planetary sensor beacon seated flush on tile)
