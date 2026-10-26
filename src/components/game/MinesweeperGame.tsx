@@ -1432,10 +1432,22 @@ export const MinesweeperGame: React.FC = () => {
     const centerV = Math.floor(N / 2);
     const landingCell = board.cellMap.get(`top_${centerU}_${centerV}`);
 
+    // Collect ALL possible player spawn positions so every spawned player is in the safe zone
+    const spawnOffsets = [
+      [0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1],
+    ];
+    const extraSafeCells = spawnOffsets
+      .map(([du, dv]) => {
+        const su = Math.max(0, Math.min(N - 1, centerU + du));
+        const sv = Math.max(0, Math.min(N - 1, centerV + dv));
+        return board.cellMap.get(`top_${su}_${sv}`) ?? null;
+      })
+      .filter((c): c is CellData => c !== null && c !== landingCell);
+
     // Pre-populate mines guaranteeing the entire landing cluster is 100% safe!
     let mineLocations: string[] = [];
     if (landingCell && !board.firstClickDone) {
-      mineLocations = board.populateMines(landingCell);
+      mineLocations = board.populateMines(landingCell, extraSafeCells);
     } else {
       mineLocations = board.cells.filter((c) => c.isMine).map((c) => c.id);
     }

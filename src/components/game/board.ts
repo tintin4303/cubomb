@@ -130,11 +130,15 @@ export class BoardManager {
     });
   }
 
-  // Place mines guaranteed safe from the first clicked cell
-  public populateMines(safeCell: CellData): string[] {
+  // Place mines guaranteed safe from one or more safe anchor cells (and all their neighbors)
+  public populateMines(safeCell: CellData, extraSafeCells: CellData[] = []): string[] {
     this.firstClickDone = true;
-    const safeNeighbors = this.getNeighbors(safeCell);
-    const safeIds = new Set<string>([safeCell.id, ...safeNeighbors.map((c) => c.id)]);
+    const allAnchors = [safeCell, ...extraSafeCells];
+    const safeIds = new Set<string>();
+    allAnchors.forEach((anchor) => {
+      safeIds.add(anchor.id);
+      this.getNeighbors(anchor).forEach((n) => safeIds.add(n.id));
+    });
 
     const candidatePool = this.cells.filter((c) => !safeIds.has(c.id));
     const pool = candidatePool.length >= this.totalMines ? candidatePool : this.cells.filter((c) => c.id !== safeCell.id);
@@ -221,53 +225,89 @@ export class BoardManager {
     v: number,
     N: number
   ): { face: FaceDirection; u: number; v: number } | null {
-    // 1. FRONT face (+Z)
-    if (face === "front") {
-      if (v >= N) return { face: "top", u: Math.max(0, Math.min(N - 1, u)), v: 0 };
-      if (v < 0) return { face: "bottom", u: Math.max(0, Math.min(N - 1, u)), v: N - 1 };
-      if (u >= N) return { face: "right", u: 0, v: Math.max(0, Math.min(N - 1, v)) };
-      if (u < 0) return { face: "left", u: N - 1, v: Math.max(0, Math.min(N - 1, v)) };
-    }
+    // Clamp a coordinate to [0, N-1]
+    const clamp = (x: number) => Math.max(0, Math.min(N - 1, x));
 
-    // 2. TOP face (+Y)
+    // Tile positioning reference (from mesh placement code):
+    //   top    (+Y):  pos = ( uPos,  +faceDist, -vPos)  → u=X, v=-Z
+    //   bottom (-Y):  pos = ( uPos,  -faceDist, +vPos)  → u=X, v=+Z
+    //   front  (+Z):  pos = ( uPos,  +vPos,  +faceDist) → u=X, v=+Y
+    //   back   (-Z):  pos = (-uPos,  -vPos,  -faceDist) → u=-X, v=-Y
+    //   left   (-X):  pos = (-faceDist, +vPos, +uPos)   → u=+Z, v=+Y
+    //   right  (+X):  pos = (+faceDist, +vPos, -uPos)   → u=-Z, v=+Y
+
+    // top face edges
     if (face === "top") {
-      if (v >= N) return { face: "back", u: Math.max(0, Math.min(N - 1, u)), v: 0 };
-      if (v < 0) return { face: "front", u: Math.max(0, Math.min(N - 1, u)), v: N - 1 };
-      if (u >= N) return { face: "right", u: Math.max(0, Math.min(N - 1, v)), v: N - 1 };
-      if (u < 0) return { face: "left", u: Math.max(0, Math.min(N - 1, N - 1 - v)), v: N - 1 };
+      // v < 0  -> north (+Z direction) -> front face top edge (v = N-1)
+      if (v < 0)   return { face: "front",  u: clamp(u),         v: N - 1 };
+      // v >= N -> south (-Z direction) -> back face top edge (v = N-1, u flipped)
+      if (v >= N)  return { face: "back",   u: clamp(N - 1 - u), v: N - 1 };
+      // u >= N -> east (+X direction)  -> right face top edge (v = N-1, u = N-1-v_old)
+      if (u >= N)  return { face: "right",  u: clamp(N - 1 - v), v: N - 1 };
+      // u < 0  -> west (-X direction)  -> left face top edge (v = N-1, u = v_old)
+      if (u < 0)   return { face: "left",   u: clamp(v),         v: N - 1 };
     }
 
-    // 3. BACK face (-Z)
-    if (face === "back") {
-      if (v >= N) return { face: "bottom", u: Math.max(0, Math.min(N - 1, u)), v: 0 };
-      if (v < 0) return { face: "top", u: Math.max(0, Math.min(N - 1, u)), v: N - 1 };
-      if (u >= N) return { face: "left", u: 0, v: Math.max(0, Math.min(N - 1, v)) };
-      if (u < 0) return { face: "right", u: N - 1, v: Math.max(0, Math.min(N - 1, v)) };
-    }
-
-    // 4. BOTTOM face (-Y)
+    // bottom face edges
     if (face === "bottom") {
-      if (v >= N) return { face: "front", u: Math.max(0, Math.min(N - 1, u)), v: 0 };
-      if (v < 0) return { face: "back", u: Math.max(0, Math.min(N - 1, u)), v: N - 1 };
-      if (u >= N) return { face: "right", u: Math.max(0, Math.min(N - 1, N - 1 - v)), v: 0 };
-      if (u < 0) return { face: "left", u: Math.max(0, Math.min(N - 1, v)), v: 0 };
+      // v >= N -> south (+Z direction) -> front face bottom edge (v = 0)
+      if (v >= N)  return { face: "front",  u: clamp(u),         v: 0 };
+      // v < 0  -> north (-Z direction) -> back face bottom edge (v = 0, u flipped)
+      if (v < 0)   return { face: "back",   u: clamp(N - 1 - u), v: 0 };
+      // u >= N -> east (+X direction)  -> right face bottom edge (v = 0, u = v_old)
+      if (u >= N)  return { face: "right",  u: clamp(v),         v: 0 };
+      // u < 0  -> west (-X direction)  -> left face bottom edge (v = 0, u = N-1-v_old)
+      if (u < 0)   return { face: "left",   u: clamp(N - 1 - v), v: 0 };
     }
 
-    // 5. RIGHT face (+X)
+    // front face edges (+Z face; u=X, v=+Y)
+    if (face === "front") {
+      // v >= N -> top edge -> top face south edge (v = N-1, u same)
+      if (v >= N)  return { face: "top",    u: clamp(u),         v: N - 1 };
+      // v < 0  -> bottom edge -> bottom face north edge (v = N-1, u same)
+      if (v < 0)   return { face: "bottom", u: clamp(u),         v: N - 1 };
+      // u >= N -> right edge -> right face left edge (u = 0, v same)
+      if (u >= N)  return { face: "right",  u: 0,                v: clamp(v) };
+      // u < 0  -> left edge  -> left face right edge (u = N-1, v same)
+      if (u < 0)   return { face: "left",   u: N - 1,            v: clamp(v) };
+    }
+
+    // back face edges (-Z face; u=-X, v=-Y)
+    if (face === "back") {
+      // v >= N -> (from back's coords) -> bottom face north edge (v = 0, u flipped)
+      if (v >= N)  return { face: "bottom", u: clamp(N - 1 - u), v: 0 };
+      // v < 0  -> top face south edge (v = N-1, u flipped)
+      if (v < 0)   return { face: "top",    u: clamp(N - 1 - u), v: N - 1 };
+      // u >= N -> left face right edge (u = N-1, v flipped due to back's -X direction)
+      if (u >= N)  return { face: "left",   u: N - 1,            v: clamp(N - 1 - v) };
+      // u < 0  -> right face left edge (u = 0, v flipped)
+      if (u < 0)   return { face: "right",  u: 0,                v: clamp(N - 1 - v) };
+    }
+
+    // right face edges (+X face; u=-Z, v=+Y)
     if (face === "right") {
-      if (u >= N) return { face: "back", u: 0, v: Math.max(0, Math.min(N - 1, v)) };
-      if (u < 0) return { face: "front", u: N - 1, v: Math.max(0, Math.min(N - 1, v)) };
-      if (v >= N) return { face: "top", u: N - 1, v: Math.max(0, Math.min(N - 1, u)) };
-      if (v < 0) return { face: "bottom", u: N - 1, v: Math.max(0, Math.min(N - 1, N - 1 - u)) };
+      // v >= N -> top edge -> top face east edge (u = N-1, v = N-1-u_old)
+      if (v >= N)  return { face: "top",    u: N - 1,            v: clamp(N - 1 - u) };
+      // v < 0  -> bottom edge -> bottom face east edge (u = N-1, v = u_old)
+      if (v < 0)   return { face: "bottom", u: N - 1,            v: clamp(u) };
+      // u >= N -> back face left edge (u = 0, v flipped)
+      if (u >= N)  return { face: "back",   u: 0,                v: clamp(N - 1 - v) };
+      // u < 0  -> front face right edge (u = N-1, v same)
+      if (u < 0)   return { face: "front",  u: N - 1,            v: clamp(v) };
     }
 
-    // 6. LEFT face (-X)
+    // left face edges (-X face; u=+Z, v=+Y)
     if (face === "left") {
-      if (u >= N) return { face: "front", u: 0, v: Math.max(0, Math.min(N - 1, v)) };
-      if (u < 0) return { face: "back", u: N - 1, v: Math.max(0, Math.min(N - 1, v)) };
-      if (v >= N) return { face: "top", u: 0, v: Math.max(0, Math.min(N - 1, N - 1 - u)) };
-      if (v < 0) return { face: "bottom", u: 0, v: Math.max(0, Math.min(N - 1, u)) };
+      // v >= N -> top edge -> top face west edge (u = 0, v = u_old)
+      if (v >= N)  return { face: "top",    u: 0,                v: clamp(u) };
+      // v < 0  -> bottom edge -> bottom face west edge (u = 0, v = N-1-u_old)
+      if (v < 0)   return { face: "bottom", u: 0,                v: clamp(N - 1 - u) };
+      // u >= N -> front face left edge (u = 0, v same)
+      if (u >= N)  return { face: "front",  u: 0,                v: clamp(v) };
+      // u < 0  -> back face right edge (u = N-1, v flipped)
+      if (u < 0)   return { face: "back",   u: N - 1,            v: clamp(N - 1 - v) };
     }
+
     return null;
   }
 
