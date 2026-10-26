@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Pickaxe,
 } from "lucide-react";
 import { Difficulty, GameState, DIFFICULTY_PRESETS, PartySession } from "./types";
 import { sound } from "./sound";
@@ -22,8 +21,6 @@ interface GameHUDProps {
   difficulty: Difficulty;
   currentMinerFace?: "top" | "bottom" | "front" | "back" | "left" | "right";
   isMuted: boolean;
-  interactMode?: "reveal" | "flag";
-  onToggleInteractMode?: () => void;
   onStartMove?: (dir: "up" | "down" | "left" | "right") => void;
   onStopMove?: () => void;
   onResetCamera: () => void;
@@ -46,8 +43,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   difficulty,
   currentMinerFace,
   isMuted,
-  interactMode = "reveal",
-  onToggleInteractMode,
   onStartMove,
   onStopMove,
   onResetCamera,
@@ -201,7 +196,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
       {/* MOBILE CONTROLS OVERLAY (Only visible on small touch screens) */}
       <div className="sm:hidden pointer-events-none w-full flex items-end justify-between px-2 pb-2">
-        {/* Mobile Left Thumb: Directional D-Pad */}
+        {/* Mobile Left Thumb: Directional D-Pad (Walk / Reveal) */}
         <div className="pointer-events-auto flex flex-col items-center select-none">
           <div className="grid grid-cols-3 gap-1 w-32 h-32 p-1.5 rounded-2xl bg-slate-950/90 backdrop-blur-md border border-cyan-500/30 shadow-2xl">
             <div />
@@ -286,44 +281,18 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         </div>
 
-        {/* Mobile Right Thumb: Action & Camera Controls */}
-        <div className="pointer-events-auto flex flex-col gap-2.5 items-end select-none">
-          {/* Dig vs Flag Mode Toggle */}
-          <button
-            onClick={() => {
-              sound.playClick();
-              onToggleInteractMode?.();
-            }}
-            className={`w-14 h-14 rounded-2xl border flex flex-col items-center justify-center shadow-2xl transition-all active:scale-95 ${
-              interactMode === "flag"
-                ? "bg-amber-950/85 border-amber-500/70 text-amber-300 shadow-amber-500/25"
-                : "bg-cyan-950/85 border-cyan-500/70 text-cyan-300 shadow-cyan-500/25"
-            }`}
-            title={interactMode === "flag" ? "Mode: Flagging Hazard" : "Mode: Excavating"}
-          >
-            {interactMode === "flag" ? (
-              <>
-                <Flag className="w-5 h-5 text-amber-400" />
-                <span className="text-[9px] font-mono font-black uppercase mt-0.5 tracking-wider text-amber-200">Flag</span>
-              </>
-            ) : (
-              <>
-                <Pickaxe className="w-5 h-5 text-cyan-400" />
-                <span className="text-[9px] font-mono font-black uppercase mt-0.5 tracking-wider text-cyan-200">Dig</span>
-              </>
-            )}
-          </button>
-
-          {/* Quick Recenter Camera */}
+        {/* Mobile Right Thumb: Reset Camera View */}
+        <div className="pointer-events-auto flex flex-col items-end select-none">
           <button
             onClick={() => {
               sound.playClick();
               onResetCamera();
             }}
-            className="w-11 h-11 rounded-xl bg-slate-900/90 border border-white/15 text-cyan-300 flex items-center justify-center shadow-lg active:scale-95 transition-all"
+            className="w-13 h-13 rounded-2xl bg-slate-900/90 border border-white/15 text-cyan-300 flex flex-col items-center justify-center shadow-2xl active:scale-95 transition-all p-2"
             title="Reset Camera View"
           >
-            <img src="/ui/crossair_blue.png" alt="" className="w-4 h-4" />
+            <img src="/ui/crossair_blue.png" alt="" className="w-5 h-5 object-contain" />
+            <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-slate-300 mt-0.5">View</span>
           </button>
         </div>
       </div>
@@ -348,7 +317,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
           {/* Gamified Graphical Input Prompts */}
           <div className="flex items-center gap-4 text-slate-300 font-mono text-[11px]">
-            {/* Traverse Prompt */}
+            {/* Walk to Reveal */}
             <div className="flex items-center gap-1.5">
               <div className="flex items-center gap-1">
                 <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-slate-100 font-mono font-black text-[10px] shadow-sm">W</span>
@@ -356,23 +325,23 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-slate-100 font-mono font-black text-[10px] shadow-sm">S</span>
                 <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-slate-100 font-mono font-black text-[10px] shadow-sm">D</span>
               </div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Move</span>
+              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Walk to Reveal</span>
             </div>
 
             <span className="text-slate-600">•</span>
 
-            {/* Excavate Prompt */}
+            {/* Click to Flag */}
             <div className="flex items-center gap-1.5">
-              <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono font-bold text-[10px]">L-CLICK</span>
-              <span className="text-[10px] text-cyan-400 uppercase font-bold tracking-wider">Dig / Chord</span>
-            </div>
-
-            <span className="text-slate-600">•</span>
-
-            {/* Flag Prompt */}
-            <div className="flex items-center gap-1.5">
-              <span className="px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/50 text-amber-300 font-mono font-bold text-[10px]">R-CLICK</span>
+              <span className="px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/50 text-amber-300 font-mono font-bold text-[10px]">CLICK</span>
               <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider">Flag Hazard</span>
+            </div>
+
+            <span className="text-slate-600">•</span>
+
+            {/* Click Number to Chord */}
+            <div className="flex items-center gap-1.5">
+              <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono font-bold text-[10px]">NUMBER</span>
+              <span className="text-[10px] text-cyan-400 uppercase font-bold tracking-wider">Chord Sweep</span>
             </div>
           </div>
         </div>
@@ -398,7 +367,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed font-sans">
               <div className="bg-slate-900/70 p-3.5 rounded-xl border border-white/5 space-y-2.5">
                 <div className="font-mono text-cyan-400 font-bold text-[11px] uppercase tracking-wider">
-                  Navigation & Surface Interaction
+                  Planetary Minefield Interaction
                 </div>
                 <div className="flex items-center gap-2 text-slate-300">
                   <div className="flex gap-1 shrink-0">
@@ -407,18 +376,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     <span className="px-1 py-0.5 rounded bg-slate-800 border border-slate-600 text-slate-100 font-mono text-[9px] font-black">S</span>
                     <span className="px-1 py-0.5 rounded bg-slate-800 border border-slate-600 text-slate-100 font-mono text-[9px] font-black">D</span>
                   </div>
-                  <span>Traverse the astronaut smoothly over all 6 planetary faces (or use touch D-pad on mobile).</span>
+                  <span>Walk the astronaut across all 6 faces. Stepping onto an unrevealed block clears it.</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-300">
-                  <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono text-[9px] font-bold shrink-0">LEFT CLICK</span>
-                  <span>Excavate a surface block. Initial landing is guaranteed safe.</span>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/50 text-amber-300 font-mono text-[9px] font-bold shrink-0">CLICK / TAP</span>
+                  <span>Click or tap any block to place or remove a warning flag. Flagged blocks cannot be accidentally stepped on.</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-300">
-                  <span className="px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/50 text-amber-300 font-mono text-[9px] font-bold shrink-0">RIGHT CLICK</span>
-                  <span>Deploy or retrieve a hazard warning beacon (or tap the Dig/Flag mobile button).</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-300">
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-white/10 text-cyan-300 font-mono text-[9px] font-bold shrink-0">CHORD</span>
+                  <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 font-mono text-[9px] font-bold shrink-0">CHORD</span>
                   <span>Click an opened number when all its neighboring mines are flagged to sweep open remaining safe tiles.</span>
                 </div>
               </div>
@@ -515,7 +480,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <p className="text-xs text-slate-400 mb-5">
               {partySession?.explodedBy
                 ? `Buried ordnance triggered by ${partySession.explodedBy}.`
-                : "A buried ordnance was struck during excavation."}
+                : "A buried ordnance was struck during exploration."}
             </p>
 
             {partySession && partySession.hostId !== currentPlayerId ? (
