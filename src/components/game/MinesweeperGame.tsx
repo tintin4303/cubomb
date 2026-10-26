@@ -916,7 +916,20 @@ export const MinesweeperGame: React.FC = () => {
     };
   }, [gameState]);
 
-  // --- Canvas Pointer Interaction (360-degree Drag Rotation + Click Dig/Flag) ---
+  // --- Camera Zoom Helper ---
+  const handleZoom = useCallback((zoomFactor: number) => {
+    if (!cameraRef.current) return;
+    const camera = cameraRef.current;
+    const target = controlsTargetRef.current;
+    const offset = camera.position.clone().sub(target);
+    const newLen = THREE.MathUtils.clamp(offset.length() * zoomFactor, 5, 65);
+    offset.setLength(newLen);
+    camera.position.copy(target).add(offset);
+    camera.lookAt(target);
+    lastManualControlTimeRef.current = performance.now();
+  }, []);
+
+  // --- Canvas Pointer Interaction (360-degree Drag Rotation + Multi-touch Pinch Zoom + Click Dig/Flag) ---
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -926,16 +939,28 @@ export const MinesweeperGame: React.FC = () => {
     let lastY = 0;
     let totalDrag = 0;
     let downButton = 0;
+    const activePointers = new Map<number, { x: number; y: number }>();
+    let lastPinchDist = 0;
 
     const onPointerDown = (e: PointerEvent) => {
       if (document.activeElement && document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
-      isDown = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      totalDrag = 0;
-      downButton = e.button;
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (activePointers.size === 1) {
+        isDown = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        totalDrag = 0;
+        downButton = e.button;
+        lastPinchDist = 0;
+      } else if (activePointers.size === 2) {
+        const pts = Array.from(activePointers.values());
+        lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        isDraggingRef.current = true;
+        totalDrag = 999;
+      }
       sound.startAmbient();
     };
 
@@ -957,6 +982,23 @@ export const MinesweeperGame: React.FC = () => {
 
     const onPointerMove = (e: PointerEvent) => {
       if (!cameraRef.current || !boardManagerRef.current) return;
+      if (activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+
+      // Handle multi-touch pinch to zoom
+      if (activePointers.size >= 2) {
+        const pts = Array.from(activePointers.values());
+        const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        if (lastPinchDist > 0 && currentDist > 0) {
+          const pinchFactor = lastPinchDist / currentDist;
+          handleZoom(pinchFactor);
+        }
+        lastPinchDist = currentDist;
+        totalDrag = 999;
+        return;
+      }
+
       const rect = container.getBoundingClientRect();
       pointerRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       pointerRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -1056,6 +1098,18 @@ export const MinesweeperGame: React.FC = () => {
     };
 
     const onPointerUp = (e: PointerEvent) => {
+      activePointers.delete(e.pointerId);
+      if (activePointers.size < 2) {
+        lastPinchDist = 0;
+      }
+      if (activePointers.size > 0) {
+        const remaining = Array.from(activePointers.values())[0];
+        lastX = remaining.x;
+        lastY = remaining.y;
+        totalDrag = 999;
+        return;
+      }
+
       const wasDown = isDown;
       isDown = false;
       isDraggingRef.current = false;
@@ -1134,18 +1188,22 @@ export const MinesweeperGame: React.FC = () => {
       }
     };
 
+    const onPointerCancel = (e: PointerEvent) => {
+      activePointers.delete(e.pointerId);
+      if (activePointers.size < 2) {
+        lastPinchDist = 0;
+      }
+      if (activePointers.size === 0) {
+        isDown = false;
+        isDraggingRef.current = false;
+        totalDrag = 0;
+      }
+    };
+
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      if (!cameraRef.current) return;
-      const camera = cameraRef.current;
-      const target = controlsTargetRef.current;
-      const offset = camera.position.clone().sub(target);
       const zoomFactor = e.deltaY > 0 ? 1.08 : 0.92;
-      const newLen = THREE.MathUtils.clamp(offset.length() * zoomFactor, 5, 65);
-      offset.setLength(newLen);
-      camera.position.copy(target).add(offset);
-      camera.lookAt(target);
-      lastManualControlTimeRef.current = performance.now();
+      handleZoom(zoomFactor);
     };
 
     const onContextMenu = (e: MouseEvent) => {
@@ -1156,6 +1214,8 @@ export const MinesweeperGame: React.FC = () => {
     container.addEventListener("pointermove", onPointerMove);
     container.addEventListener("pointerleave", resetHoverHighlights);
     window.addEventListener("pointerup", onPointerUp);
+    container.addEventListener("pointercancel", onPointerCancel);
+    window.addEventListener("pointercancel", onPointerCancel);
     container.addEventListener("wheel", onWheel, { passive: false });
     container.addEventListener("contextmenu", onContextMenu);
 
@@ -1164,10 +1224,12 @@ export const MinesweeperGame: React.FC = () => {
       container.removeEventListener("pointermove", onPointerMove);
       container.removeEventListener("pointerleave", resetHoverHighlights);
       window.removeEventListener("pointerup", onPointerUp);
+      container.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("pointercancel", onPointerCancel);
       container.removeEventListener("wheel", onWheel);
       container.removeEventListener("contextmenu", onContextMenu);
     };
-  }, []);
+  }, [handleZoom]);
 
   // --- Camera Presets ---
   const handleResetCamera = () => {
@@ -1488,14 +1550,14 @@ export const MinesweeperGame: React.FC = () => {
 
   return (
     <div
-      className="relative w-screen h-screen overflow-hidden bg-slate-950"
-      style={{ position: "relative", width: "100vw", height: "100vh", overflow: "hidden" }}
+      className="relative w-screen h-screen h-[100dvh] overflow-hidden bg-slate-950"
+      style={{ position: "relative", width: "100vw", height: "100dvh", overflow: "hidden" }}
     >
       {/* 3D Canvas Container */}
       <div
         ref={containerRef}
-        className="w-full h-full cursor-grab active:cursor-grabbing"
-        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 1 }}
+        className="w-full h-full cursor-grab active:cursor-grabbing select-none"
+        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 1, touchAction: "none" }}
       />
 
       {/* Cyber HUD Overlay */}
@@ -1512,6 +1574,8 @@ export const MinesweeperGame: React.FC = () => {
         onStopMove={handleStopMove}
         onResetCamera={handleResetCamera}
         onCameraPreset={handleCameraPreset}
+        onZoomIn={() => handleZoom(0.85)}
+        onZoomOut={() => handleZoom(1.18)}
         onRestart={() => {
           if (partySession) {
             if (partySession.hostId === partyClient.playerId) {

@@ -30,6 +30,8 @@ interface GameHUDProps {
   partySession?: PartySession | null;
   currentPlayerId?: string;
   onLeaveParty?: () => void;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
 }
 
 // Reusable Kenney glass-panel button
@@ -105,6 +107,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   partySession,
   currentPlayerId,
   onLeaveParty,
+  onZoomIn,
+  onZoomOut,
 }) => {
   const [showHelp, setShowHelp] = useState(false);
 
@@ -311,11 +315,16 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       {/* ============================================================
           MOBILE CONTROLS (touch only)
       ============================================================ */}
-      <div className="sm:hidden pointer-events-none w-full flex items-end justify-between px-3 pb-3">
+      <div
+        className="sm:hidden pointer-events-none w-full flex items-end justify-between px-3.5"
+        style={{
+          paddingBottom: "max(2.25rem, calc(env(safe-area-inset-bottom, 0px) + 1.25rem))",
+        }}
+      >
         {/* D-Pad: left thumb */}
         <div className="pointer-events-auto" style={{ touchAction: "none" }}>
           <div className="relative w-32 h-32">
-            {/* Center dot */}
+            {/* Center crosshair */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <img src="/ui/crossair_blue.png" alt="" className="w-5 h-5 opacity-40" />
             </div>
@@ -366,15 +375,35 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         </div>
 
-        {/* Reset view: right thumb */}
-        <div className="pointer-events-auto">
+        {/* Right thumb: Camera Zoom & View cluster */}
+        <div className="pointer-events-auto flex flex-col items-center gap-1.5 select-none">
+          {/* Zoom In */}
+          <button
+            onClick={() => { sound.playClick(); onZoomIn?.(); }}
+            className="kenney-btn w-10 h-10 flex items-center justify-center font-mono font-black text-cyan-300 text-base shadow-xl active:scale-95"
+            title="Zoom In"
+            aria-label="Zoom In"
+          >
+            +
+          </button>
+          {/* Zoom Out */}
+          <button
+            onClick={() => { sound.playClick(); onZoomOut?.(); }}
+            className="kenney-btn w-10 h-10 flex items-center justify-center font-mono font-black text-cyan-300 text-base shadow-xl active:scale-95"
+            title="Zoom Out"
+            aria-label="Zoom Out"
+          >
+            -
+          </button>
+          {/* Reset view */}
           <button
             onClick={() => { sound.playClick(); onResetCamera(); }}
-            className="kenney-btn flex flex-col items-center gap-1 px-3 py-2.5 shadow-xl"
+            className="kenney-btn w-10 h-11 flex flex-col items-center justify-center gap-0.5 shadow-xl active:scale-95"
             title="Reset Camera View"
+            aria-label="Reset View"
           >
-            <img src="/ui/crossair_blue.png" alt="" className="w-5 h-5" />
-            <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-cyan-300">View</span>
+            <img src="/ui/crossair_blue.png" alt="" className="w-4 h-4 object-contain" />
+            <span className="text-[7px] font-mono font-bold uppercase tracking-wider text-cyan-300">View</span>
           </button>
         </div>
       </div>
