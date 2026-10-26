@@ -76,6 +76,7 @@ export const MinesweeperGame: React.FC = () => {
     right: false,
   });
   const mobileMoveDirRef = useRef<{ x: number; z: number } | null>(null);
+  const mobileJoystickDirRef = useRef<{ x: number; y: number } | null>(null);
   const currentMinerFaceRef = useRef<FaceDirection>("top");
 
   const currentConfig = DIFFICULTY_PRESETS[difficulty];
@@ -88,6 +89,7 @@ export const MinesweeperGame: React.FC = () => {
   const resetMovementInputs = useCallback(() => {
     keysPressedRef.current = { forward: false, backward: false, left: false, right: false };
     mobileMoveDirRef.current = null;
+    mobileJoystickDirRef.current = null;
     if (minerAvatarRef.current && minerAvatarRef.current.action === "walk") {
       minerAvatarRef.current.action = "idle";
     }
@@ -753,7 +755,13 @@ export const MinesweeperGame: React.FC = () => {
         let lft = keysPressedRef.current.left;
         let rgt = keysPressedRef.current.right;
 
-        if (mobileMoveDirRef.current) {
+        let moveX: number | undefined = undefined;
+        let moveY: number | undefined = undefined;
+
+        if (mobileJoystickDirRef.current) {
+          moveX = mobileJoystickDirRef.current.x;
+          moveY = mobileJoystickDirRef.current.y;
+        } else if (mobileMoveDirRef.current) {
           if (mobileMoveDirRef.current.z > 0) fwd = true;
           if (mobileMoveDirRef.current.z < 0) bwd = true;
           if (mobileMoveDirRef.current.x < 0) lft = true;
@@ -765,6 +773,8 @@ export const MinesweeperGame: React.FC = () => {
           backward: bwd,
           left: lft,
           right: rgt,
+          moveX,
+          moveY,
         });
       }
 
@@ -898,6 +908,7 @@ export const MinesweeperGame: React.FC = () => {
     const handleBlur = () => {
       keysPressedRef.current = { forward: false, backward: false, left: false, right: false };
       mobileMoveDirRef.current = null;
+      mobileJoystickDirRef.current = null;
       if (minerAvatarRef.current && minerAvatarRef.current.action === "walk") {
         minerAvatarRef.current.action = "idle";
       }
@@ -1572,6 +1583,15 @@ export const MinesweeperGame: React.FC = () => {
         isMuted={isMuted}
         onStartMove={handleStartMove}
         onStopMove={handleStopMove}
+        onJoystickMove={(dir) => {
+          mobileJoystickDirRef.current = dir;
+        }}
+        onJoystickStop={() => {
+          mobileJoystickDirRef.current = null;
+          if (minerAvatarRef.current && minerAvatarRef.current.action === "walk") {
+            minerAvatarRef.current.action = "idle";
+          }
+        }}
         onResetCamera={handleResetCamera}
         onCameraPreset={handleCameraPreset}
         onZoomIn={() => handleZoom(0.85)}
@@ -1611,6 +1631,8 @@ export const MinesweeperGame: React.FC = () => {
             const m = sound.toggleMute();
             setIsMuted(m);
           }}
+          canResume={gameState === "playing" || gameState === "idle"}
+          onResume={() => setShowStartMenu(false)}
         />
       )}
 

@@ -311,57 +311,87 @@ export class BoardManager {
     return null;
   }
 
-  // Create Flag Model (3D futuristic hologram beacon seated flush on tile)
+  // Create Beacon Model (3D futuristic planetary sensor beacon seated flush on tile)
   public createFlagModel(): THREE.Group {
     const group = new THREE.Group();
-    const scale = 0.5;
+    const scale = 0.55;
 
-    // Base collar ring - seated at y = 0
-    const baseH = 0.06 * scale;
-    const baseGeo = new THREE.CylinderGeometry(0.2 * scale, 0.26 * scale, baseH, 12);
+    // 1. Heavy industrial tripod collar base - seated flush at y = 0
+    const baseH = 0.08 * scale;
+    const baseGeo = new THREE.CylinderGeometry(0.24 * scale, 0.32 * scale, baseH, 8);
     const baseMat = new THREE.MeshStandardMaterial({
-      color: 0x334155,
-      metalness: 0.8,
+      color: 0x1e293b,
+      metalness: 0.9,
       roughness: 0.2,
     });
     const base = new THREE.Mesh(baseGeo, baseMat);
     base.position.y = baseH / 2;
     group.add(base);
 
-    // Pole anchored directly into base
-    const poleH = 0.85 * scale;
-    const poleGeo = new THREE.CylinderGeometry(0.025 * scale, 0.025 * scale, poleH, 8);
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9 });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.y = poleH / 2;
-    group.add(pole);
+    // 3 stabilizing tripod foot struts
+    for (let i = 0; i < 3; i++) {
+      const angle = (i * Math.PI * 2) / 3;
+      const legGeo = new THREE.BoxGeometry(0.08 * scale, 0.04 * scale, 0.22 * scale);
+      const legMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.3 });
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(Math.sin(angle) * 0.22 * scale, 0.02 * scale, Math.cos(angle) * 0.22 * scale);
+      leg.rotation.y = angle;
+      group.add(leg);
+    }
 
-    // Holographic flag banner (Triangle)
-    const bannerShape = new THREE.Shape();
-    bannerShape.moveTo(0, 0);
-    bannerShape.lineTo(0.42 * scale, 0.16 * scale);
-    bannerShape.lineTo(0, 0.32 * scale);
-    bannerShape.closePath();
+    // 2. Central sensor pylon shaft
+    const shaftH = 0.8 * scale;
+    const shaftGeo = new THREE.CylinderGeometry(0.045 * scale, 0.07 * scale, shaftH, 8);
+    const shaftMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.85, roughness: 0.25 });
+    const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+    shaft.position.y = baseH + shaftH / 2;
+    group.add(shaft);
 
-    const bannerGeo = new THREE.ShapeGeometry(bannerShape);
-    const bannerMat = new THREE.MeshStandardMaterial({
+    // 3. Dual pulsing holographic sensor rings
+    const ringMat = new THREE.MeshStandardMaterial({
       color: 0xf59e0b,
       emissive: 0xd97706,
-      emissiveIntensity: 0.9,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.95,
+      emissiveIntensity: 1.2,
+      metalness: 0.5,
+      roughness: 0.2,
     });
-    const banner = new THREE.Mesh(bannerGeo, bannerMat);
-    banner.position.set(0.02 * scale, 0.48 * scale, 0);
-    group.add(banner);
+    const ring1Geo = new THREE.TorusGeometry(0.12 * scale, 0.022 * scale, 6, 16);
+    ring1Geo.rotateX(Math.PI / 2);
+    const ring1 = new THREE.Mesh(ring1Geo, ringMat);
+    ring1.position.y = baseH + shaftH * 0.45;
+    group.add(ring1);
 
-    // Tip beacon sphere
-    const tipGeo = new THREE.SphereGeometry(0.05 * scale, 8, 8);
-    const tipMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
-    const tip = new THREE.Mesh(tipGeo, tipMat);
-    tip.position.y = poleH;
-    group.add(tip);
+    const ring2Geo = new THREE.TorusGeometry(0.09 * scale, 0.018 * scale, 6, 16);
+    ring2Geo.rotateX(Math.PI / 2);
+    const ring2 = new THREE.Mesh(ring2Geo, ringMat);
+    ring2.position.y = baseH + shaftH * 0.75;
+    group.add(ring2);
+
+    // 4. Floating holographic beacon core (Octahedron crystal emitter)
+    const coreGeo = new THREE.OctahedronGeometry(0.11 * scale, 0);
+    const coreMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 1.5,
+      roughness: 0.1,
+      metalness: 0.9,
+    });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.position.y = baseH + shaftH + 0.1 * scale;
+    group.add(core);
+
+    // 5. Vertical translucent holographic signal cone (warning beam)
+    const beamGeo = new THREE.CylinderGeometry(0.18 * scale, 0.02 * scale, 0.45 * scale, 8, 1, true);
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: 0xf59e0b,
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.y = baseH + shaftH + 0.35 * scale;
+    group.add(beam);
 
     return group;
   }

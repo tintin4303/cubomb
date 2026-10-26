@@ -571,7 +571,14 @@ export class MinerAvatar {
   public updateContinuous(
     delta: number,
     camera: THREE.Camera,
-    input: { forward: boolean; backward: boolean; left: boolean; right: boolean }
+    input: {
+      forward?: boolean;
+      backward?: boolean;
+      left?: boolean;
+      right?: boolean;
+      moveX?: number;
+      moveY?: number;
+    }
   ) {
     if (this.action === "dead") {
       this.animTimer += delta;
@@ -585,9 +592,13 @@ export class MinerAvatar {
 
     const currentFaceNormal = this.getFaceNormal(this.currentCoord.face);
     let walkDir = new THREE.Vector3();
-    const hasInput = input.forward || input.backward || input.left || input.right;
 
-    if (hasInput) {
+    const hasAnalog =
+      (input.moveX !== undefined && Math.abs(input.moveX) > 0.04) ||
+      (input.moveY !== undefined && Math.abs(input.moveY) > 0.04);
+    const hasKeyInput = !!(input.forward || input.backward || input.left || input.right);
+
+    if (hasAnalog || hasKeyInput) {
       // Manual input cancels any pending click-to-walk navigation
       this.navTargetCoord = null;
       this.navTargetPos = null;
@@ -605,10 +616,17 @@ export class MinerAvatar {
       }
       const upOnPlane = new THREE.Vector3().crossVectors(currentFaceNormal, rightOnPlane).normalize();
 
-      if (input.forward) walkDir.add(upOnPlane);
-      if (input.backward) walkDir.sub(upOnPlane);
-      if (input.right) walkDir.add(rightOnPlane);
-      if (input.left) walkDir.sub(rightOnPlane);
+      if (hasAnalog) {
+        const mx = input.moveX || 0;
+        const my = input.moveY || 0;
+        walkDir.addScaledVector(rightOnPlane, mx);
+        walkDir.addScaledVector(upOnPlane, my);
+      } else {
+        if (input.forward) walkDir.add(upOnPlane);
+        if (input.backward) walkDir.sub(upOnPlane);
+        if (input.right) walkDir.add(rightOnPlane);
+        if (input.left) walkDir.sub(rightOnPlane);
+      }
 
       if (walkDir.lengthSq() > 0.001) {
         walkDir.normalize();

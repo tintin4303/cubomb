@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Users, User, ArrowRight, ShieldAlert, LogOut } from "lucide-react";
+import { Users, User, ArrowRight, ShieldAlert, LogOut, Play, X } from "lucide-react";
 import { Difficulty, GameMode, DIFFICULTY_PRESETS } from "./types";
 import { partyClient } from "@/lib/partyClient";
 import { sound } from "./sound";
@@ -17,6 +17,8 @@ interface StartMenuProps {
   onOpenHelp: () => void;
   isMuted: boolean;
   onToggleMute: () => void;
+  onResume?: () => void;
+  canResume?: boolean;
 }
 
 // Difficulty metadata for display
@@ -33,6 +35,8 @@ export const StartMenu: React.FC<StartMenuProps> = ({
   onCreateParty,
   isMuted,
   onToggleMute,
+  onResume,
+  canResume,
 }) => {
   const [activeTab, setActiveTab] = useState<"solo" | "party">("solo");
   const [partyTab, setPartyTab] = useState<"create" | "join">("create");
@@ -147,8 +151,34 @@ export const StartMenu: React.FC<StartMenuProps> = ({
                   className="w-4 h-4 object-contain"
                   style={{ filter: "drop-shadow(0 0 3px rgba(0,229,255,0.5))" }} />
               </button>
+              {canResume && (
+                <button
+                  onClick={() => { sound.playClick(); onResume?.(); }}
+                  className="kenney-btn w-8 h-8 flex items-center justify-center text-slate-300 hover:text-white"
+                  title="Resume Game"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Resume Banner (if game active) */}
+          {canResume && (
+            <button
+              onClick={() => { sound.playClick(); onResume?.(); }}
+              className="w-full kenney-btn-primary py-3 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 mb-3.5"
+              style={{
+                background: "linear-gradient(135deg, rgba(16,185,129,0.3) 0%, rgba(5,150,105,0.2) 100%)",
+                borderColor: "rgba(52,211,153,0.55)",
+                color: "#6ee7b7",
+                boxShadow: "0 0 16px rgba(52,211,153,0.2)",
+              }}
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Resume Mission</span>
+            </button>
+          )}
 
           {/* Account bar */}
           <div className="kenney-panel-inset p-2.5 flex items-center gap-2.5">

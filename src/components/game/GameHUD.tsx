@@ -1,12 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import {
-  ChevronUp,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import React, { useState, useRef } from "react";
+import { LogOut } from "lucide-react";
 import { Difficulty, GameState, DIFFICULTY_PRESETS, PartySession } from "./types";
 import { sound } from "./sound";
 
@@ -21,6 +16,8 @@ interface GameHUDProps {
   isMuted: boolean;
   onStartMove?: (dir: "up" | "down" | "left" | "right") => void;
   onStopMove?: () => void;
+  onJoystickMove?: (dir: { x: number; y: number }) => void;
+  onJoystickStop?: () => void;
   onResetCamera: () => void;
   onCameraPreset: (preset: "front" | "back" | "top" | "bottom" | "left" | "right") => void;
   onRestart: () => void;
@@ -89,6 +86,111 @@ const SegDisplay: React.FC<{ value: string | number; color?: string; size?: "sm"
   );
 };
 
+// Roblox-style 360-degree virtual draggable thumbstick
+const VirtualJoystick: React.FC<{
+  onMove?: (dir: { x: number; y: number }) => void;
+  onStop?: () => void;
+}> = ({ onMove, onStop }) => {
+  const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
+  const [active, setActive] = useState(false);
+  const baseRef = useRef<HTMLDivElement>(null);
+  const touchIdRef = useRef<number | null>(null);
+
+  const maxRadius = 38;
+
+  const updateKnob = (clientX: number, clientY: number) => {
+    if (!baseRef.current) return;
+    const rect = baseRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
+    const dist = Math.hypot(dx, dy);
+
+    let clampedX = dx;
+    let clampedY = dy;
+    if (dist > maxRadius) {
+      clampedX = (dx / dist) * maxRadius;
+      clampedY = (dy / dist) * maxRadius;
+    }
+
+    setKnobPos({ x: clampedX, y: clampedY });
+
+    const nx = clampedX / maxRadius;
+    const ny = -clampedY / maxRadius;
+    onMove?.({ x: nx, y: ny });
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (touchIdRef.current !== null) return;
+    touchIdRef.current = e.pointerId;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setActive(true);
+    updateKnob(e.clientX, e.clientY);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (touchIdRef.current !== e.pointerId) return;
+    updateKnob(e.clientX, e.clientY);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (touchIdRef.current !== e.pointerId) return;
+    touchIdRef.current = null;
+    setActive(false);
+    setKnobPos({ x: 0, y: 0 });
+    onStop?.();
+  };
+
+  return (
+    <div
+      ref={baseRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      className="relative w-32 h-32 rounded-full flex items-center justify-center select-none cursor-pointer"
+      style={{
+        background: active
+          ? "radial-gradient(circle, rgba(0,229,255,0.15) 0%, rgba(6,12,24,0.92) 75%)"
+          : "radial-gradient(circle, rgba(14,24,44,0.7) 0%, rgba(6,12,24,0.88) 80%)",
+        border: active ? "1.5px solid rgba(0,229,255,0.6)" : "1.5px solid rgba(0,229,255,0.25)",
+        boxShadow: active
+          ? "0 0 24px rgba(0,229,255,0.25), inset 0 0 16px rgba(0,229,255,0.12)"
+          : "0 8px 24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)",
+        touchAction: "none",
+      }}
+    >
+      {/* Direction guide crosshair markings */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-25">
+        <div className="w-16 h-px bg-cyan-400" />
+        <div className="h-16 w-px bg-cyan-400 absolute" />
+      </div>
+      <div className="absolute w-20 h-20 rounded-full border border-cyan-500/20 pointer-events-none" />
+
+      {/* Draggable thumb knob */}
+      <div
+        className="w-12 h-12 rounded-full flex items-center justify-center pointer-events-none shadow-xl"
+        style={{
+          transform: `translate(${knobPos.x}px, ${knobPos.y}px)`,
+          transition: active ? "none" : "transform 0.18s cubic-bezier(0.18, 0.89, 0.32, 1.28)",
+          background: active
+            ? "linear-gradient(135deg, rgba(0,229,255,0.5) 0%, rgba(2,132,199,0.9) 100%)"
+            : "linear-gradient(135deg, rgba(30,41,59,0.95) 0%, rgba(15,23,42,0.95) 100%)",
+          border: active ? "2px solid #67e8f9" : "1.5px solid rgba(0,229,255,0.4)",
+          boxShadow: active ? "0 0 16px rgba(0,229,255,0.6)" : "0 4px 12px rgba(0,0,0,0.5)",
+        }}
+      >
+        <div className="w-3.5 h-3.5 rounded-full bg-cyan-300 opacity-90 shadow-sm" />
+      </div>
+    </div>
+  );
+};
+
 export const GameHUD: React.FC<GameHUDProps> = ({
   gameState,
   minesRemaining,
@@ -98,8 +200,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   difficulty,
   currentMinerFace,
   isMuted,
-  onStartMove,
-  onStopMove,
+  onJoystickMove,
+  onJoystickStop,
   onResetCamera,
   onRestart,
   onToggleMute,
@@ -147,8 +249,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
           {/* Quick Action Buttons */}
           <div className="kenney-panel p-1 flex items-center gap-1 shadow-md">
-            <KBtn onClick={() => { sound.playClick(); onOpenMenu?.(); }} title="Main Menu" className="w-7 h-7 p-1">
-              <KIcon src="/ui/icon_gear.png" size={14} />
+            <KBtn onClick={() => { sound.playClick(); onOpenMenu?.(); }} title="Exit to Menu" className="w-7 h-7 p-1">
+              <LogOut className="w-3.5 h-3.5 text-slate-300 hover:text-rose-400 transition-colors" />
             </KBtn>
             <KBtn onClick={() => { sound.playClick(); onToggleMute(); }} title={isMuted ? "Unmute" : "Mute"} className="w-7 h-7 p-1">
               <KIcon src={isMuted ? "/ui/icon_audioOff.png" : "/ui/icon_audioOn.png"} size={14} />
@@ -191,8 +293,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         <div className="flex justify-center w-full sm:w-auto pointer-events-auto">
           <div className="kenney-panel px-3 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between gap-3 sm:gap-5 w-full sm:w-auto shadow-lg">
 
-            {/* Threat Counter */}
-            <div className="flex items-center gap-1.5 sm:gap-2" title="Unneutralized Mines">
+            {/* Bombs Counter */}
+            <div className="flex items-center gap-1.5 sm:gap-2" title="Unneutralized Bombs">
               <div
                 className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center shrink-0"
                 style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)" }}
@@ -201,12 +303,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               </div>
               <div className="flex flex-col">
                 <span className="text-[8px] sm:text-[9px] font-mono font-bold uppercase tracking-wider text-rose-400/80 leading-none">
-                  Threats
+                  Bombs
                 </span>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <SegDisplay value={minesRemaining.toString().padStart(2, "0")} color="#f87171" size="sm" />
                 </div>
-                {/* Threat progress bar */}
+                {/* Bomb threat progress bar */}
                 <div className="w-10 sm:w-12 h-1 rounded-full bg-slate-800/80 overflow-hidden mt-0.5 hidden xs:block">
                   <div
                     className="h-full rounded-full transition-all duration-500"
@@ -234,7 +336,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             {/* Divider */}
             <div className="w-px h-6 sm:h-7 bg-white/10 shrink-0" />
 
-            {/* Beacons / Flags */}
+            {/* Beacons Deployed */}
             <div className="flex items-center gap-1.5 sm:gap-2" title="Deployed Beacons">
               <div className="flex flex-col items-end">
                 <span className="text-[8px] sm:text-[9px] font-mono font-bold uppercase tracking-wider text-amber-400/80 leading-none">
@@ -274,10 +376,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               sound.playClick();
               onOpenMenu?.();
             }}
-            title="Main Menu"
+            title="Exit to Menu"
             className="w-8 h-8"
           >
-            <KIcon src="/ui/icon_gear.png" size={16} />
+            <LogOut className="w-4 h-4 text-slate-300 hover:text-rose-400 transition-colors" />
           </KBtn>
           <KBtn
             onClick={() => {
@@ -313,66 +415,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       </header>
 
       {/* ============================================================
-          MOBILE CONTROLS (touch only)
+          MOBILE CONTROLS (Draggable Joystick + Zoom/View Controls)
       ============================================================ */}
       <div
-        className="sm:hidden pointer-events-none w-full flex items-end justify-between px-3.5"
+        className="sm:hidden pointer-events-none w-full flex items-end justify-between px-4 pb-6"
         style={{
           paddingBottom: "max(2.25rem, calc(env(safe-area-inset-bottom, 0px) + 1.25rem))",
         }}
       >
-        {/* D-Pad: left thumb */}
+        {/* Roblox-Style Draggable Virtual Thumbstick: left thumb */}
         <div className="pointer-events-auto" style={{ touchAction: "none" }}>
-          <div className="relative w-32 h-32">
-            {/* Center crosshair */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <img src="/ui/crossair_blue.png" alt="" className="w-5 h-5 opacity-40" />
-            </div>
-            {/* Up */}
-            <button
-              className="dpad-btn absolute top-0 left-1/2 -translate-x-1/2"
-              onPointerDown={(e) => { e.stopPropagation(); onStartMove?.("up"); }}
-              onPointerUp={(e) => { e.stopPropagation(); onStopMove?.(); }}
-              onPointerLeave={() => onStopMove?.()}
-              onPointerCancel={() => onStopMove?.()}
-              aria-label="Up"
-            >
-              <ChevronUp className="w-5 h-5" />
-            </button>
-            {/* Down */}
-            <button
-              className="dpad-btn absolute bottom-0 left-1/2 -translate-x-1/2"
-              onPointerDown={(e) => { e.stopPropagation(); onStartMove?.("down"); }}
-              onPointerUp={(e) => { e.stopPropagation(); onStopMove?.(); }}
-              onPointerLeave={() => onStopMove?.()}
-              onPointerCancel={() => onStopMove?.()}
-              aria-label="Down"
-            >
-              <ChevronDown className="w-5 h-5" />
-            </button>
-            {/* Left */}
-            <button
-              className="dpad-btn absolute left-0 top-1/2 -translate-y-1/2"
-              onPointerDown={(e) => { e.stopPropagation(); onStartMove?.("left"); }}
-              onPointerUp={(e) => { e.stopPropagation(); onStopMove?.(); }}
-              onPointerLeave={() => onStopMove?.()}
-              onPointerCancel={() => onStopMove?.()}
-              aria-label="Left"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            {/* Right */}
-            <button
-              className="dpad-btn absolute right-0 top-1/2 -translate-y-1/2"
-              onPointerDown={(e) => { e.stopPropagation(); onStartMove?.("right"); }}
-              onPointerUp={(e) => { e.stopPropagation(); onStopMove?.(); }}
-              onPointerLeave={() => onStopMove?.()}
-              onPointerCancel={() => onStopMove?.()}
-              aria-label="Right"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
+          <VirtualJoystick onMove={onJoystickMove} onStop={onJoystickStop} />
         </div>
 
         {/* Right thumb: Camera Zoom & View cluster */}
@@ -441,11 +494,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
           <div className="w-px h-4 bg-white/10" />
 
-          {/* Click to flag */}
+          {/* Deploy Beacon */}
           <div className="flex items-center gap-2">
             <img src="/ui/mouse_l.png" alt="Left click" className="w-6 h-6 object-contain"
               style={{ filter: "drop-shadow(0 1px 2px rgba(251,191,36,0.5))" }} />
-            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-wider">Flag Hazard</span>
+            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-wider">Deploy Beacon</span>
           </div>
 
           <div className="w-px h-4 bg-white/10" />
@@ -497,20 +550,20 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 <div className="flex items-center gap-3">
                   <img src="/ui/mouse_l.png" alt="click" className="w-6 h-6 object-contain shrink-0"
                     style={{ filter: "drop-shadow(0 1px 3px rgba(251,191,36,0.6))" }} />
-                  <span>Click or tap an unopened block to toggle a hazard flag.</span>
+                  <span>Click or tap an unopened block to deploy a warning beacon.</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="shrink-0 px-2 py-0.5 font-mono font-black text-[10px] rounded"
                     style={{ background: "rgba(0,229,255,0.12)", border: "1px solid rgba(0,229,255,0.35)", color: "#67e8f9" }}>
                     NUM
                   </span>
-                  <span>Click an opened number when all its mines are flagged to sweep safe neighbor tiles.</span>
+                  <span>Click an opened number when all its adjacent bombs have beacons deployed to sweep safe neighbor tiles.</span>
                 </div>
               </div>
 
               <div className="kenney-panel-inset p-3.5">
                 <div className="font-mono text-amber-400 font-bold text-[11px] uppercase tracking-wider mb-1.5">Mission Objective</div>
-                <p>Numeric tags indicate how many mines occupy adjacent blocks in 3D space. Sweep the entire planetary crust to secure the expedition.</p>
+                <p>Numeric tags indicate how many bombs occupy adjacent blocks in 3D space. Sweep the entire planetary crust to secure the expedition.</p>
               </div>
             </div>
 
@@ -554,7 +607,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               Mission Accomplished
             </h2>
             <p className="text-xs text-slate-400 mb-5">
-              {partySession ? "Planetary minefield cleared by your crew." : "All mines secured and neutralized."}
+              {partySession ? "Planetary bomb field cleared by your crew." : "All bombs secured and neutralized."}
             </p>
 
             <div className="kenney-panel-inset p-3 mb-5 flex justify-around font-mono text-xs">
