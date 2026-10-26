@@ -3,6 +3,13 @@
 :root {
   --background: #07090e;
   --foreground: #e2e8f0;
+  --cyan:  #00e5ff;
+  --cyan2: #67e8f9;
+  --amber: #fbbf24;
+  --rose:  #f87171;
+  --panel-bg: rgba(6, 10, 20, 0.92);
+  --panel-border: rgba(0, 229, 255, 0.22);
+  --panel-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
 body {
@@ -19,12 +26,205 @@ body {
   height: 100vh;
 }
 
-/* Crisp Minimalist Aerospace Panels */
+/* ============================================================
+   KENNEY 9-SLICE GLASS PANEL  (uses /ui/glassPanel.png)
+   The image is 100x100 with a ~12px rounded border.
+   border-image-slice 12 = cut 12px from each edge as corners.
+   ============================================================ */
+
+/* Compact HUD panel */
+.kenney-panel {
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  box-shadow: var(--panel-shadow);
+}
+
+/* Larger card panel (menus, modals) */
+.kenney-panel-lg {
+  background: rgba(5, 8, 18, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+/* Recessed inset section within a panel */
+.kenney-panel-inset {
+  background: rgba(2, 4, 10, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* ============================================================
+   KENNEY BUTTON STYLES
+   ============================================================ */
+
+/* Standard small action button */
+.kenney-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 18, 32, 0.9);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+  font-size: 10px;
+  font-family: inherit;
+  line-height: 1;
+}
+.kenney-btn:hover {
+  background: rgba(0, 229, 255, 0.1);
+  border-color: rgba(0, 229, 255, 0.35);
+  color: #e2e8f0;
+}
+.kenney-btn:active {
+  transform: scale(0.94);
+  background: rgba(0, 229, 255, 0.18);
+}
+
+/* Primary CTA button: glowing cyan */
+.kenney-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.55);
+  background: linear-gradient(135deg, rgba(0, 120, 200, 0.5) 0%, rgba(0, 229, 255, 0.2) 100%);
+  color: #67e8f9;
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.15), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.kenney-btn-primary:hover {
+  background: linear-gradient(135deg, rgba(0, 150, 220, 0.6) 0%, rgba(0, 229, 255, 0.3) 100%);
+  border-color: rgba(0, 229, 255, 0.8);
+  box-shadow: 0 6px 30px rgba(0, 229, 255, 0.25);
+  color: #e0f2fe;
+}
+.kenney-btn-primary:active {
+  transform: scale(0.97);
+}
+.kenney-btn-primary:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Danger button: glowing red */
+.kenney-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: linear-gradient(135deg, rgba(120, 10, 10, 0.5) 0%, rgba(239, 68, 68, 0.2) 100%);
+  color: #fca5a5;
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.15);
+}
+.kenney-btn-danger:hover {
+  border-color: rgba(239, 68, 68, 0.8);
+  box-shadow: 0 6px 30px rgba(239, 68, 68, 0.25);
+}
+.kenney-btn-danger:active {
+  transform: scale(0.97);
+}
+
+/* ============================================================
+   D-PAD BUTTON
+   ============================================================ */
+.dpad-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  background: rgba(6, 12, 24, 0.88);
+  color: rgba(103, 232, 249, 0.8);
+  cursor: pointer;
+  transition: background 0.1s, transform 0.1s;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.dpad-btn:active {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: rgba(0, 229, 255, 0.6);
+  color: #fff;
+  transform: scale(0.92);
+}
+
+/* ============================================================
+   CORNER ACCENT LINES (decorative chamfered HUD corners)
+   ============================================================ */
+.hud-corner-tl::before,
+.hud-corner-tr::before,
+.hud-corner-bl::before,
+.hud-corner-br::before {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: rgba(0, 229, 255, 0.5);
+  border-style: solid;
+}
+.hud-corner-tl::before { top: 0; left: 0; border-width: 2px 0 0 2px; }
+.hud-corner-tr::before { top: 0; right: 0; border-width: 2px 2px 0 0; }
+.hud-corner-bl::before { bottom: 0; left: 0; border-width: 0 0 2px 2px; }
+.hud-corner-br::before { bottom: 0; right: 0; border-width: 0 2px 2px 0; }
+
+/* ============================================================
+   SCANLINE FLICKER  (optional: applied to overlays)
+   ============================================================ */
+@keyframes scanline {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 100%; }
+}
+
+/* ============================================================
+   VICTORY / DEFEAT PULSE GLOW
+   ============================================================ */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
+}
+.animate-glow-pulse {
+  animation: glow-pulse 1.6s ease-in-out infinite;
+}
+
+/* ============================================================
+   LEGACY COMPATIBILITY (used by external components)
+   ============================================================ */
 .glass-panel {
-  background: rgba(10, 14, 22, 0.85);
+  background: rgba(10, 14, 22, 0.88);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
 }
 
@@ -33,45 +233,41 @@ body {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 229, 255, 0.22);
+  border-radius: 16px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 24px rgba(0, 229, 255, 0.07);
 }
 
-/* Gamified Sci-Fi Tactical HUD Utilities */
-.hud-chamfer {
-  clip-path: polygon(
-    0 6px,
-    6px 0,
-    calc(100% - 6px) 0,
-    100% 6px,
-    100% calc(100% - 6px),
-    calc(100% - 6px) 100%,
-    6px 100%,
-    0 calc(100% - 6px)
-  );
-}
-
 .hud-panel {
-  background: rgba(8, 12, 20, 0.88);
+  background: rgba(6, 10, 20, 0.9);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(0, 229, 255, 0.2);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .hud-panel-danger {
-  background: rgba(18, 8, 12, 0.92);
+  background: rgba(16, 6, 10, 0.93);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(244, 63, 94, 0.3);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-/* Custom glow animations */
+.hud-chamfer {
+  clip-path: polygon(
+    0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px,
+    100% calc(100% - 6px), calc(100% - 6px) 100%,
+    6px 100%, 0 calc(100% - 6px)
+  );
+}
+
+/* subtle pulse */
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(0.98); }
+  50%       { opacity: 0.85; transform: scale(0.98); }
 }
-
 .animate-pulse-subtle {
   animation: pulse-subtle 3s ease-in-out infinite;
 }
