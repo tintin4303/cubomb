@@ -155,6 +155,39 @@ export class MinerAvatar {
     if (this.isGltfLoaded) return;
     const gltfClone = template.clone(true);
 
+    // Deep clone materials so each player avatar has unique customizable suit colors
+    gltfClone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        if (Array.isArray(mesh.material)) {
+          mesh.material = mesh.material.map((m) => m.clone());
+        } else if (mesh.material) {
+          mesh.material = mesh.material.clone();
+        }
+
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((mat) => {
+          if (!mat) return;
+          const stdMat = mat as THREE.MeshStandardMaterial;
+          if (stdMat.name === "metalRed") {
+            // Suit accent: chest emblem, shoulder armor, arm bands
+            stdMat.color.set(this.accentColor);
+            stdMat.emissive.set(this.accentColor);
+            stdMat.emissiveIntensity = 0.45;
+            stdMat.roughness = 0.25;
+            stdMat.metalness = 0.6;
+          } else if (stdMat.name === "rockDark") {
+            // Helmet visor glass
+            stdMat.color.set(this.accentColor);
+            stdMat.emissive.set(this.accentColor);
+            stdMat.emissiveIntensity = 0.3;
+            stdMat.roughness = 0.1;
+            stdMat.metalness = 0.85;
+          }
+        });
+      }
+    });
+
     this.gltfRoot = gltfClone;
     this.gltfArmLeft = gltfClone.getObjectByName("armLeft") || null;
     this.gltfArmRight = gltfClone.getObjectByName("armRight") || null;
@@ -168,19 +201,48 @@ export class MinerAvatar {
     this.gltfRoot.rotation.y = Math.PI;
     this.gltfRoot.position.set(0, 0, 0);
 
-    // Attach pickaxe to right arm if available
-    if (this.gltfArmRight && this.pickaxeGroup) {
-      const pickaxeClone = this.pickaxeGroup.clone(true);
-      pickaxeClone.position.set(0, -0.32, 0.08);
-      pickaxeClone.rotation.set(Math.PI / 4, 0, 0);
-      this.gltfArmRight.add(pickaxeClone);
-    }
+    // Ground locator halo ring for multiplayer player identification
+    const haloGeo = new THREE.RingGeometry(0.3, 0.36, 24);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: this.accentColor,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.65,
+    });
+    const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+    haloMesh.rotation.x = -Math.PI / 2;
+    haloMesh.position.y = 0.02;
+    this.group.add(haloMesh);
 
     this.group.add(this.gltfRoot);
     if (this.proceduralContainer) {
       this.proceduralContainer.visible = false;
     }
     this.isGltfLoaded = true;
+  }
+
+  public setAccentColor(colorHex: number | string) {
+    const colorNum = typeof colorHex === "string" ? parseInt(colorHex.replace("#", "0x"), 16) : colorHex;
+    this.accentColor = colorNum;
+    if (this.gltfRoot) {
+      this.gltfRoot.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          mats.forEach((mat) => {
+            if (!mat) return;
+            const stdMat = mat as THREE.MeshStandardMaterial;
+            if (stdMat.name === "metalRed") {
+              stdMat.color.set(this.accentColor);
+              stdMat.emissive.set(this.accentColor);
+            } else if (stdMat.name === "rockDark") {
+              stdMat.color.set(this.accentColor);
+              stdMat.emissive.set(this.accentColor);
+            }
+          });
+        }
+      });
+    }
   }
 
   private createModel() {
