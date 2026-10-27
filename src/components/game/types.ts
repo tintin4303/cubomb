@@ -73,6 +73,7 @@ export interface PartyPlayer {
   id: string;
   name: string;
   color: string;
+  skinId?: string;
   isHost: boolean;
   coord: { face: FaceDirection; u: number; v: number };
   position: { x: number; y: number; z: number };

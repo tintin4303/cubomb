@@ -642,14 +642,13 @@ export const MinesweeperGame: React.FC = () => {
       spawnCoord = { face: randomFace, u: randomU, v: randomV };
     }
 
-    const playerHex = parseInt((partyClient.playerColor || "#0284c7").replace("#", "0x"), 16) || 0x0284c7;
     const miner = new MinerAvatar(
       N,
       spacing,
       cubeSize,
       partyClient.playerId || "local_player",
       partyClient.playerName || "Miner",
-      playerHex
+      partyClient.playerSkinId || partyClient.playerColor || "apollo_arctic"
     );
     miner.teleportToCoord(spawnCoord);
     miner.onFaceChange = (face) => {
@@ -795,16 +794,15 @@ export const MinesweeperGame: React.FC = () => {
 
           let remote = remoteAvatarsRef.current.get(pId);
           if (!remote) {
-            const colorNum = parseInt((p.color || "#0284c7").replace("#", "0x"), 16);
             const avatar = new MinerAvatar(
               currentConfig.gridSize,
               1.05,
               1.0,
               pId,
               p.name || "Explorer",
-              colorNum
+              p.skinId || p.color || "apollo_arctic"
             );
-            const nameplate = createNameplateSprite(p.name || "Explorer", p.color || "#0284c7");
+            const nameplate = createNameplateSprite(p.name || "Explorer", p.skinId || p.color || "apollo_arctic");
             scene.add(avatar.group);
             scene.add(nameplate);
             remote = { avatar, nameplate };
@@ -1444,6 +1442,9 @@ export const MinesweeperGame: React.FC = () => {
       setDifficulty(newDiff);
       setShowStartMenu(false);
       setShowLobbyModal(false);
+      if (minerAvatarRef.current) {
+        minerAvatarRef.current.applySkin(partyClient.playerSkinId);
+      }
       initGame(newMode, newDiff);
     },
     [clearRemoteAvatars, initGame]
@@ -1632,7 +1633,12 @@ export const MinesweeperGame: React.FC = () => {
             setIsMuted(m);
           }}
           canResume={gameState === "playing" || gameState === "idle"}
-          onResume={() => setShowStartMenu(false)}
+          onResume={() => {
+            if (minerAvatarRef.current) {
+              minerAvatarRef.current.applySkin(partyClient.playerSkinId);
+            }
+            setShowStartMenu(false);
+          }}
         />
       )}
 

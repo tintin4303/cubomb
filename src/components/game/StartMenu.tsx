@@ -9,6 +9,7 @@ import { authManager, UserProfile } from "@/lib/authManager";
 import { AuthModal } from "./AuthModal";
 import { FriendsModal } from "./FriendsModal";
 import { friendsManager } from "@/lib/friendsManager";
+import { PILOT_SKINS, getPilotSkin, DEFAULT_SKIN_ID } from "./skins";
 
 interface StartMenuProps {
   onStartSolo: (mode: GameMode, difficulty: Difficulty) => void;
@@ -52,12 +53,19 @@ export const StartMenu: React.FC<StartMenuProps> = ({
   const [showFriendsModal, setShowFriendsModal] = useState<boolean>(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState<number>(0);
 
+  const [selectedSkinId, setSelectedSkinId] = useState<string>(() => {
+    return partyClient.playerSkinId || DEFAULT_SKIN_ID;
+  });
+  const [showSkinPicker, setShowSkinPicker] = useState<boolean>(false);
+
   useEffect(() => {
     authManager.getSessionUser().then(() => {
       const p = authManager.getProfile();
       if (p) {
         setProfile(p);
-        partyClient.setPlayerProfile(p.username, p.avatar_color);
+        const skin = getPilotSkin(p.avatar_color);
+        setSelectedSkinId(skin.id);
+        partyClient.setPlayerProfile(p.username, skin.id);
         friendsManager.getPendingRequests().then((reqs) => setPendingRequestsCount(reqs.length));
       }
     });
@@ -77,9 +85,17 @@ export const StartMenu: React.FC<StartMenuProps> = ({
     const p = authManager.getProfile();
     if (p) {
       setProfile(p);
-      partyClient.setPlayerProfile(p.username, p.avatar_color);
+      const skin = getPilotSkin(p.avatar_color);
+      setSelectedSkinId(skin.id);
+      partyClient.setPlayerProfile(p.username, skin.id);
       friendsManager.getPendingRequests().then((reqs) => setPendingRequestsCount(reqs.length));
     }
+  };
+
+  const handleSelectSkin = (skinId: string) => {
+    sound.playClick();
+    setSelectedSkinId(skinId);
+    partyClient.setPlayerSkin(skinId);
   };
 
   const handleJoinPartySubmit = async (e?: React.FormEvent) => {
@@ -229,6 +245,86 @@ export const StartMenu: React.FC<StartMenuProps> = ({
               </>
             )}
           </div>
+
+          {/* Pilot Suit & Skins Panel */}
+          {(() => {
+            const activeSkin = getPilotSkin(selectedSkinId);
+            return (
+              <div className="kenney-panel-inset p-3 mt-2 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3.5 h-3.5 rounded-full border border-white/30"
+                      style={{
+                        background: activeSkin.previewColor,
+                        boxShadow: `0 0 8px ${activeSkin.previewColor}`,
+                      }}
+                    />
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                      Pilot Suit
+                    </span>
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/5">
+                      {activeSkin.rarity}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      sound.playClick();
+                      setShowSkinPicker(!showSkinPicker);
+                    }}
+                    className="text-[10px] font-mono font-bold text-cyan-400 hover:text-cyan-300 transition-colors"
+                  >
+                    {showSkinPicker ? "Close" : "Change Suit"}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-black text-white font-mono">{activeSkin.name}</div>
+                    <div className="text-[10px] text-slate-400">{activeSkin.tagline}</div>
+                  </div>
+                </div>
+
+                {showSkinPicker && (
+                  <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-white/5 max-h-52 overflow-y-auto pr-1">
+                    {PILOT_SKINS.map((skin) => {
+                      const isSelected = skin.id === selectedSkinId;
+                      return (
+                        <button
+                          key={skin.id}
+                          onClick={() => handleSelectSkin(skin.id)}
+                          className={`p-2 rounded-xl text-left transition-all border ${
+                            isSelected
+                              ? "bg-slate-800/90 border-cyan-400 shadow-md"
+                              : "bg-slate-900/60 border-white/5 hover:border-white/20"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                style={{
+                                  background: skin.previewColor,
+                                  boxShadow: isSelected ? `0 0 6px ${skin.previewColor}` : "none",
+                                }}
+                              />
+                              <span className="text-[10px] font-mono font-bold text-white truncate max-w-[80px]">
+                                {skin.name}
+                              </span>
+                            </div>
+                            <span className="text-[8px] font-mono text-slate-400">{skin.rarity}</span>
+                          </div>
+                          <div className="text-[9px] text-slate-400 leading-tight line-clamp-1">
+                            {skin.tagline}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ====================================================

@@ -1,6 +1,7 @@
 import { PartySession, PartyPlayer, GameMode, Difficulty, FaceDirection, DIFFICULTY_PRESETS } from "@/components/game/types";
 import { getSupabaseClient } from "./supabaseClient";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { getPilotSkin, DEFAULT_SKIN_ID } from "@/components/game/skins";
 
 export type PartyUpdateCallback = (session: PartySession) => void;
 
@@ -17,7 +18,8 @@ class PartyClient {
   public session: PartySession | null = null;
   public playerId: string = "";
   public playerName: string = "Miner";
-  public playerColor: string = "#0284c7";
+  public playerSkinId: string = DEFAULT_SKIN_ID;
+  public playerColor: string = DEFAULT_SKIN_ID;
   public isConnectedRealtime: boolean = false;
 
   private realtimeChannel: RealtimeChannel | null = null;
@@ -38,10 +40,14 @@ class PartyClient {
         localStorage.getItem("cubomb_player_name") ||
         localStorage.getItem("3dminer_player_name") ||
         "Miner";
-      this.playerColor =
+
+      const savedSkin =
+        localStorage.getItem("cubomb_player_skin") ||
         localStorage.getItem("cubomb_player_color") ||
-        localStorage.getItem("3dminer_player_color") ||
-        "#0284c7";
+        localStorage.getItem("3dminer_player_color");
+      const skin = getPilotSkin(savedSkin || undefined);
+      this.playerSkinId = skin.id;
+      this.playerColor = skin.id;
 
       try {
         this.broadcastChannel = new BroadcastChannel("cubomb_party_broadcast");
@@ -59,23 +65,52 @@ class PartyClient {
     }
   }
 
-  public setPlayerProfile(name: string, color: string) {
-    this.playerName = name;
-    this.playerColor = color;
+  public setPlayerSkin(skinId: string) {
+    const skin = getPilotSkin(skinId);
+    this.playerSkinId = skin.id;
+    this.playerColor = skin.id;
     if (typeof window !== "undefined") {
-      localStorage.setItem("cubomb_player_name", name);
-      localStorage.setItem("cubomb_player_color", color);
+      localStorage.setItem("cubomb_player_skin", skin.id);
+      localStorage.setItem("cubomb_player_color", skin.id);
     }
     if (this.session && this.session.players[this.playerId]) {
-      this.session.players[this.playerId].name = name;
-      this.session.players[this.playerId].color = color;
+      this.session.players[this.playerId].color = skin.id;
+      this.session.players[this.playerId].skinId = skin.id;
       this.notify();
     }
     if (this.realtimeChannel && this.isConnectedRealtime) {
       this.realtimeChannel.track({
         id: this.playerId,
         name: this.playerName,
-        color: this.playerColor,
+        color: skin.id,
+        skinId: skin.id,
+        isHost: this.session?.hostId === this.playerId,
+      });
+    }
+  }
+
+  public setPlayerProfile(name: string, skinOrColor: string) {
+    const skin = getPilotSkin(skinOrColor);
+    this.playerName = name;
+    this.playerSkinId = skin.id;
+    this.playerColor = skin.id;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("cubomb_player_name", name);
+      localStorage.setItem("cubomb_player_color", skin.id);
+      localStorage.setItem("cubomb_player_skin", skin.id);
+    }
+    if (this.session && this.session.players[this.playerId]) {
+      this.session.players[this.playerId].name = name;
+      this.session.players[this.playerId].color = skin.id;
+      this.session.players[this.playerId].skinId = skin.id;
+      this.notify();
+    }
+    if (this.realtimeChannel && this.isConnectedRealtime) {
+      this.realtimeChannel.track({
+        id: this.playerId,
+        name: this.playerName,
+        color: skin.id,
+        skinId: skin.id,
         isHost: this.session?.hostId === this.playerId,
       });
     }

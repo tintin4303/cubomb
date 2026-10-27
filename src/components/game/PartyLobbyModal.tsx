@@ -5,6 +5,7 @@ import { Users, Copy, Check, Play, LogOut, Crown } from "lucide-react";
 import { PartySession, DIFFICULTY_PRESETS } from "./types";
 import { sound } from "./sound";
 import { partyClient } from "@/lib/partyClient";
+import { getPilotSkin } from "./skins";
 
 interface PartyLobbyModalProps {
   session: PartySession;
@@ -109,27 +110,35 @@ export const PartyLobbyModal: React.FC<PartyLobbyModalProps> = ({
             <span className="font-mono text-cyan-400">{players.length} / 8</span>
           </div>
           <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-            {players.map((p) => (
-              <div
-                key={p.id}
-                className="bg-slate-900/50 border border-white/5 p-2.5 rounded-xl flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: p.color }}
-                  />
-                  <span className="text-xs font-semibold text-slate-200">
-                    {p.name} {p.id === currentPlayerId && <span className="text-cyan-400 text-[10px]">(You)</span>}
-                  </span>
+            {players.map((p) => {
+              const pSkin = getPilotSkin(p.skinId || p.color);
+              return (
+                <div
+                  key={p.id}
+                  className="bg-slate-900/50 border border-white/5 p-2.5 rounded-xl flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: pSkin.previewColor, boxShadow: `0 0 6px ${pSkin.previewColor}` }}
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-slate-200">
+                        {p.name} {p.id === currentPlayerId && <span className="text-cyan-400 text-[10px]">(You)</span>}
+                      </span>
+                      <span className="text-[9px] font-mono text-slate-500">
+                        {pSkin.name}
+                      </span>
+                    </div>
+                  </div>
+                  {p.isHost && (
+                    <span className="text-[10px] bg-slate-800 text-slate-300 border border-white/10 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                      <Crown className="w-3 h-3 text-amber-400" /> Host
+                    </span>
+                  )}
                 </div>
-                {p.isHost && (
-                  <span className="text-[10px] bg-slate-800 text-slate-300 border border-white/10 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                    <Crown className="w-3 h-3 text-amber-400" /> Host
-                  </span>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

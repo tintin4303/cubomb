@@ -5,27 +5,20 @@ import { User, Lock, X, Check, AlertCircle, LogIn, UserPlus } from "lucide-react
 import { authManager } from "@/lib/authManager";
 import { sound } from "./sound";
 
+import { PILOT_SKINS, DEFAULT_SKIN_ID } from "./skins";
+
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAuthSuccess?: () => void;
 }
 
-const AVATAR_COLORS = [
-  "#0284c7", // Sky Cyan
-  "#10b981", // Emerald Green
-  "#f59e0b", // Amber Gold
-  "#ef4444", // Ruby Red
-  "#8b5cf6", // Violet
-  "#ec4899", // Rose Pink
-];
-
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuccess }) => {
   const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [identifier, setIdentifier] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedColor, setSelectedColor] = useState(AVATAR_COLORS[0]);
+  const [selectedSkinId, setSelectedSkinId] = useState(DEFAULT_SKIN_ID);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -57,7 +50,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           setIsLoading(false);
           return;
         }
-        const res = await authManager.signUp(username.trim(), password, selectedColor);
+        const res = await authManager.signUp(username.trim(), password, selectedSkinId);
         if (res.error) {
           setErrorMsg(res.error);
         } else {
@@ -194,31 +187,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
             </div>
           </div>
 
-          {/* Color Picker (on Signup) */}
+          {/* Pilot Suit Picker (on Signup) */}
           {tab === "signup" && (
             <div>
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                Suit Color Accent
+                Starting Pilot Suit
               </label>
-              <div className="flex items-center gap-2">
-                {AVATAR_COLORS.map((hex) => (
-                  <button
-                    key={hex}
-                    type="button"
-                    onClick={() => {
-                      sound.playClick();
-                      setSelectedColor(hex);
-                    }}
-                    className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all ${
-                      selectedColor === hex
-                        ? "ring-2 ring-white scale-110 shadow-lg"
-                        : "opacity-70 hover:opacity-100 hover:scale-105"
-                    }`}
-                    style={{ backgroundColor: hex }}
-                  >
-                    {selectedColor === hex && <Check className="w-3.5 h-3.5 text-white" />}
-                  </button>
-                ))}
+              <div className="grid grid-cols-3 gap-1.5">
+                {PILOT_SKINS.map((skin) => {
+                  const isSel = selectedSkinId === skin.id;
+                  return (
+                    <button
+                      key={skin.id}
+                      type="button"
+                      onClick={() => {
+                        sound.playClick();
+                        setSelectedSkinId(skin.id);
+                      }}
+                      className={`p-2 rounded-xl text-left border transition-all flex flex-col gap-1 ${
+                        isSel
+                          ? "bg-slate-800 border-cyan-400 shadow-sm"
+                          : "bg-slate-900/60 border-white/5 hover:border-white/20"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{
+                            backgroundColor: skin.previewColor,
+                            boxShadow: isSel ? `0 0 6px ${skin.previewColor}` : "none",
+                          }}
+                        />
+                        {isSel && <Check className="w-3 h-3 text-cyan-400" />}
+                      </div>
+                      <span className="text-[10px] font-bold text-white font-mono truncate">
+                        {skin.name}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { sound } from "./sound";
+import { getPilotSkin, PilotSkin, DEFAULT_SKIN_ID } from "./skins";
 
 export type CharacterAction = "idle" | "walk" | "dig" | "celebrate" | "dead";
 
@@ -65,7 +66,9 @@ export class MinerAvatar {
   public gridSize: number = 5;
   public spacing: number = 1.1;
   public cubeSize: number = 1.0;
+  public currentSkin: PilotSkin;
   private accentColor: number = 0x0284c7;
+  private haloMesh: THREE.Mesh | null = null;
 
   constructor(
     gridSize: number = 5,
@@ -73,14 +76,17 @@ export class MinerAvatar {
     cubeSize: number = 1.0,
     id: string = "local_player",
     playerName: string = "Miner",
-    accentColor: number = 0x0284c7
+    skinOrColor: string | number = DEFAULT_SKIN_ID
   ) {
     this.gridSize = gridSize;
     this.spacing = spacing;
     this.cubeSize = cubeSize;
     this.id = id;
     this.playerName = playerName;
-    this.accentColor = accentColor;
+    this.currentSkin = typeof skinOrColor === "number"
+      ? getPilotSkin("#" + skinOrColor.toString(16).padStart(6, "0"))
+      : getPilotSkin(skinOrColor);
+    this.accentColor = this.currentSkin.accentColor;
 
     this.group = new THREE.Group();
     this.createModel();
@@ -164,27 +170,6 @@ export class MinerAvatar {
         } else if (mesh.material) {
           mesh.material = mesh.material.clone();
         }
-
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        mats.forEach((mat) => {
-          if (!mat) return;
-          const stdMat = mat as THREE.MeshStandardMaterial;
-          if (stdMat.name === "metalRed") {
-            // Suit accent: chest emblem, shoulder armor, arm bands
-            stdMat.color.set(this.accentColor);
-            stdMat.emissive.set(this.accentColor);
-            stdMat.emissiveIntensity = 0.45;
-            stdMat.roughness = 0.25;
-            stdMat.metalness = 0.6;
-          } else if (stdMat.name === "rockDark") {
-            // Helmet visor glass
-            stdMat.color.set(this.accentColor);
-            stdMat.emissive.set(this.accentColor);
-            stdMat.emissiveIntensity = 0.3;
-            stdMat.roughness = 0.1;
-            stdMat.metalness = 0.85;
-          }
-        });
       }
     });
 
@@ -201,18 +186,21 @@ export class MinerAvatar {
     this.gltfRoot.rotation.y = Math.PI;
     this.gltfRoot.position.set(0, 0, 0);
 
+    // Apply active pilot skin to all cloned mesh materials
+    this.applySkin(this.currentSkin.id);
+
     // Ground locator halo ring for multiplayer player identification
     const haloGeo = new THREE.RingGeometry(0.3, 0.36, 24);
     const haloMat = new THREE.MeshBasicMaterial({
-      color: this.accentColor,
+      color: this.currentSkin.haloColor,
       side: THREE.DoubleSide,
       transparent: true,
       opacity: 0.65,
     });
-    const haloMesh = new THREE.Mesh(haloGeo, haloMat);
-    haloMesh.rotation.x = -Math.PI / 2;
-    haloMesh.position.y = 0.02;
-    this.group.add(haloMesh);
+    this.haloMesh = new THREE.Mesh(haloGeo, haloMat);
+    this.haloMesh.rotation.x = -Math.PI / 2;
+    this.haloMesh.position.y = 0.02;
+    this.group.add(this.haloMesh);
 
     this.group.add(this.gltfRoot);
     if (this.proceduralContainer) {
@@ -221,9 +209,16 @@ export class MinerAvatar {
     this.isGltfLoaded = true;
   }
 
-  public setAccentColor(colorHex: number | string) {
-    const colorNum = typeof colorHex === "string" ? parseInt(colorHex.replace("#", "0x"), 16) : colorHex;
-    this.accentColor = colorNum;
+  public applySkin(skinOrColor: string | number) {
+    this.currentSkin = typeof skinOrColor === "number"
+      ? getPilotSkin("#" + skinOrColor.toString(16).padStart(6, "0"))
+      : getPilotSkin(skinOrColor);
+    this.accentColor = this.currentSkin.accentColor;
+
+    if (this.haloMesh) {
+      (this.haloMesh.material as THREE.MeshBasicMaterial).color.set(this.currentSkin.haloColor);
+    }
+
     if (this.gltfRoot) {
       this.gltfRoot.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
@@ -232,17 +227,39 @@ export class MinerAvatar {
           mats.forEach((mat) => {
             if (!mat) return;
             const stdMat = mat as THREE.MeshStandardMaterial;
-            if (stdMat.name === "metalRed") {
-              stdMat.color.set(this.accentColor);
-              stdMat.emissive.set(this.accentColor);
+            if (stdMat.name === "metal") {
+              // Suit main body
+              stdMat.color.set(this.currentSkin.suitColor);
+              stdMat.roughness = 0.35;
+              stdMat.metalness = 0.25;
+            } else if (stdMat.name === "metalRed") {
+              // Primary armor accent plates
+              stdMat.color.set(this.currentSkin.accentColor);
+              stdMat.emissive.set(this.currentSkin.accentColor);
+              stdMat.emissiveIntensity = 0.45;
+              stdMat.roughness = 0.25;
+              stdMat.metalness = 0.6;
+            } else if (stdMat.name === "metalDark" || stdMat.name === "dark") {
+              // Joints & boots
+              stdMat.color.set(this.currentSkin.jointColor);
+              stdMat.roughness = 0.7;
+              stdMat.metalness = 0.4;
             } else if (stdMat.name === "rockDark") {
-              stdMat.color.set(this.accentColor);
-              stdMat.emissive.set(this.accentColor);
+              // Visor faceplate
+              stdMat.color.set(this.currentSkin.visorColor);
+              stdMat.emissive.set(this.currentSkin.visorEmissive);
+              stdMat.emissiveIntensity = this.currentSkin.visorEmissiveIntensity;
+              stdMat.roughness = 0.1;
+              stdMat.metalness = 0.9;
             }
           });
         }
       });
     }
+  }
+
+  public setAccentColor(colorHex: number | string) {
+    this.applySkin(colorHex);
   }
 
   private createModel() {
@@ -964,7 +981,8 @@ export class MinerAvatar {
   }
 }
 
-export function createNameplateSprite(name: string, colorHex: string): THREE.Sprite {
+export function createNameplateSprite(name: string, skinOrColor: string): THREE.Sprite {
+  const skin = getPilotSkin(skinOrColor);
   const canvas = document.createElement("canvas");
   canvas.width = 256;
   canvas.height = 64;
@@ -979,7 +997,7 @@ export function createNameplateSprite(name: string, colorHex: string): THREE.Spr
     ctx.fill();
 
     ctx.lineWidth = 3;
-    ctx.strokeStyle = colorHex || "#0284c7";
+    ctx.strokeStyle = skin.nameplateBorder;
     ctx.stroke();
 
     ctx.fillStyle = "#ffffff";
